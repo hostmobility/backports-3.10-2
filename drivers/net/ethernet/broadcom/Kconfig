@@ -19,11 +19,13 @@ config NET_VENDOR_BROADCOM
 if NET_VENDOR_BROADCOM
 
 config B44
+	depends on !BACKPORT_KERNEL_2_6_28
 	tristate "Broadcom 440x/47xx ethernet support"
 	depends on m
 	depends on SSB_POSSIBLE && HAS_DMA
 	select SSB
 	select BACKPORT_MII
+	depends on PHYLIB
 	---help---
 	  If you have a network (Ethernet) controller of this type, say Y
 	  or M and read the Ethernet-HOWTO, available from

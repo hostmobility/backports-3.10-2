@@ -93,8 +93,10 @@ static void bnep_net_set_mc_list(struct net_device *dev)
 		netdev_for_each_mc_addr(ha, dev) {
 			if (i == BNEP_MAX_MULTICAST_FILTERS)
 				break;
-			memcpy(__skb_put(skb, ETH_ALEN), mc_addr(ha), ETH_ALEN);
-			memcpy(__skb_put(skb, ETH_ALEN), mc_addr(ha), ETH_ALEN);
+			memcpy(__skb_put(skb, ETH_ALEN), mc_addr(ha),
+			       ETH_ALEN);
+			memcpy(__skb_put(skb, ETH_ALEN), mc_addr(ha),
+			       ETH_ALEN);
 
 			i++;
 		}

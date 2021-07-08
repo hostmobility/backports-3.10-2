@@ -381,7 +381,6 @@ MODULE_PARM_DESC(debug, "Set debug level (0-5) (default 0)");
 
 compat_pci_suspend(rtl_pci_suspend);
 compat_pci_resume(rtl_pci_resume);
-
 static SIMPLE_DEV_PM_OPS(rtlwifi_pm_ops, rtl_pci_suspend, rtl_pci_resume);
 
 static struct pci_driver rtl92de_driver = {
@@ -392,8 +391,8 @@ static struct pci_driver rtl92de_driver = {
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,29))
 	.driver.pm = &rtlwifi_pm_ops,
 #elif defined(CONFIG_PM_SLEEP)
-	.suspend    = rtl_pci_suspend_compat,
-	.resume     = rtl_pci_resume_compat,
+	.suspend = rtl_pci_suspend_compat,
+	.resume = rtl_pci_resume_compat,
 #endif
 };
 

@@ -79,6 +79,16 @@ config REGULATOR_88PM8607
 	help
 	  This driver supports 88PM8607 voltage regulator chips.
 
+config REGULATOR_ACT8865
+	depends on !BACKPORT_KERNEL_3_12
+	tristate "Active-semi act8865 voltage regulator"
+	depends on m
+	depends on I2C
+	depends on REGMAP_I2C
+	help
+	  This driver controls a active-semi act8865 voltage output
+	  regulator via I2C bus.
+
 config REGULATOR_AD5398
 	depends on !BACKPORT_KERNEL_3_5
 	tristate "Analog Devices AD5398/AD5821 regulators"
@@ -294,6 +304,14 @@ config REGULATOR_LP8788
 	help
 	  This driver supports LP8788 voltage regulator chip.
 
+config REGULATOR_MAX14577
+	tristate "Maxim 14577 regulator"
+	depends on m
+	depends on MFD_MAX14577
+	help
+	  This driver controls a Maxim 14577 regulator via I2C bus.
+	  The regulators include safeout LDO and current regulator 'CHARGER'.
+
 config REGULATOR_MAX1586
 	depends on !BACKPORT_KERNEL_3_6
 	tristate "Maxim 1586/1587 voltage regulator"
@@ -413,7 +431,7 @@ config REGULATOR_MC13783
 	depends on !BACKPORT_KERNEL_3_6
 	tristate "Freescale MC13783 regulator driver"
 	depends on m
-	depends on MFD_MC13783
+	depends on MFD_MC13XXX
 	select REGULATOR_MC13XXX_CORE
 	help
 	  Say y here to support the regulators found on the Freescale MC13783
@@ -463,7 +481,7 @@ config REGULATOR_PCF50633
 
 config REGULATOR_PFUZE100
 	depends on !BACKPORT_KERNEL_3_6
-	tristate "Support regulators on Freescale PFUZE100 PMIC"
+	tristate "Freescale PFUZE100 regulator driver"
 	depends on m
 	depends on I2C
 	depends on REGMAP_I2C
@@ -494,7 +512,7 @@ config REGULATOR_S2MPS11
 	 including Dual-Phase Buck converter, Buck-Boost converter, various LDOs.
 
 config REGULATOR_S5M8767
-	depends on !BACKPORT_KERNEL_3_13
+	depends on !BACKPORT_KERNEL_3_15
 	tristate "Samsung S5M8767A voltage regulator"
 	depends on m
 	depends on MFD_SEC_CORE
@@ -613,7 +631,7 @@ config REGULATOR_TPS6524X
 	  port controller.
 
 config REGULATOR_TPS6586X
-	depends on !BACKPORT_KERNEL_3_9
+	depends on !BACKPORT_KERNEL_3_14
 	tristate "TI TPS6586X Power regulators"
 	depends on m
 	depends on MFD_TPS6586X
@@ -621,7 +639,7 @@ config REGULATOR_TPS6586X
 	  This driver supports TPS6586X voltage regulator chips.
 
 config REGULATOR_TPS65910
-	depends on !BACKPORT_KERNEL_3_6
+	depends on !BACKPORT_KERNEL_3_14
 	tristate "TI TPS65910/TPS65911 Power Regulators"
 	depends on m
 	depends on MFD_TPS65910

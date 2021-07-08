@@ -537,7 +537,8 @@ int ieee802154_list_iface(struct sk_buff *skb, struct genl_info *info)
 	if (!msg)
 		goto out_dev;
 
-	rc = ieee802154_nl_fill_iface(msg, genl_info_snd_portid(info), info->snd_seq,
+	rc = ieee802154_nl_fill_iface(msg, genl_info_snd_portid(info),
+				      info->snd_seq,
 			0, dev);
 	if (rc < 0)
 		goto out_free;

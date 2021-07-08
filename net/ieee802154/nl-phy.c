@@ -104,7 +104,8 @@ int ieee802154_list_phy(struct sk_buff *skb, struct genl_info *info)
 	if (!msg)
 		goto out_dev;
 
-	rc = ieee802154_nl_fill_phy(msg, genl_info_snd_portid(info), info->snd_seq,
+	rc = ieee802154_nl_fill_phy(msg, genl_info_snd_portid(info),
+				    info->snd_seq,
 			0, phy);
 	if (rc < 0)
 		goto out_free;

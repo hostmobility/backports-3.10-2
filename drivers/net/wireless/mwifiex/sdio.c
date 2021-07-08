@@ -111,6 +111,7 @@ mwifiex_sdio_probe(struct sdio_func *func, const struct sdio_device_id *id)
 	return ret;
 }
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,34))
 /*
  * SDIO resume.
  *
@@ -155,6 +156,7 @@ static int mwifiex_sdio_resume(struct device *dev)
 
 	return 0;
 }
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,34)) */
 
 /*
  * SDIO remove.

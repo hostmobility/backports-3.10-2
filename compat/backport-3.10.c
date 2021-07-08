@@ -14,6 +14,9 @@
 #include <linux/proc_fs.h>
 #include <linux/random.h>
 #include <linux/tty.h>
+#include <linux/pci.h>
+#include <linux/pci_regs.h>
+#include <linux/of.h>
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,6,0))
 #include <linux/init.h>
@@ -25,7 +28,6 @@
 #include <linux/suspend.h>
 #include <linux/delay.h>
 #include <linux/gpio.h>
-#include <linux/of.h>
 #include <linux/regmap.h>
 #include <linux/regulator/of_regulator.h>
 #include <linux/regulator/consumer.h>
@@ -128,4 +130,108 @@ void tty_port_tty_hangup(struct tty_port *port, bool check_clocal)
 }
 EXPORT_SYMBOL_GPL(tty_port_tty_hangup);
 #endif /* CONFIG_TTY */
+
+#ifdef CONFIG_PCI_IOV
+/*
+ * pci_vfs_assigned - returns number of VFs are assigned to a guest
+ * @dev: the PCI device
+ *
+ * Returns number of VFs belonging to this device that are assigned to a guest.
+ * If device is not a physical function returns -ENODEV.
+ */
+int pci_vfs_assigned(struct pci_dev *dev)
+{
+	struct pci_dev *vfdev;
+	unsigned int vfs_assigned = 0;
+	unsigned short dev_id;
+
+	/* only search if we are a PF */
+	if (!dev->is_physfn)
+		return 0;
+
+	/*
+	 * determine the device ID for the VFs, the vendor ID will be the
+	 * same as the PF so there is no need to check for that one
+	 */
+	pci_read_config_word(dev, dev->sriov->pos + PCI_SRIOV_VF_DID, &dev_id);
+
+	/* loop through all the VFs to see if we own any that are assigned */
+	vfdev = pci_get_device(dev->vendor, dev_id, NULL);
+	while (vfdev) {
+		/*
+		 * It is considered assigned if it is a virtual function with
+		 * our dev as the physical function and the assigned bit is set
+		 */
+		if (vfdev->is_virtfn && (vfdev->physfn == dev) &&
+		    (vfdev->dev_flags & PCI_DEV_FLAGS_ASSIGNED))
+			vfs_assigned++;
+
+		vfdev = pci_get_device(dev->vendor, dev_id, vfdev);
+	}
+
+	return vfs_assigned;
+}
+EXPORT_SYMBOL_GPL(pci_vfs_assigned);
+#endif /* CONFIG_PCI_IOV */
+
 #endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,28)) */
+
+#ifdef CONFIG_OF
+/**
+ * of_find_property_value_of_size
+ *
+ * @np:		device node from which the property value is to be read.
+ * @propname:	name of the property to be searched.
+ * @len:	requested length of property value
+ *
+ * Search for a property in a device node and valid the requested size.
+ * Returns the property value on success, -EINVAL if the property does not
+ *  exist, -ENODATA if property does not have a value, and -EOVERFLOW if the
+ * property data isn't large enough.
+ *
+ */
+void *of_find_property_value_of_size(const struct device_node *np,
+				     const char *propname, u32 len)
+{
+	struct property *prop = of_find_property(np, propname, NULL);
+
+	if (!prop)
+		return ERR_PTR(-EINVAL);
+	if (!prop->value)
+		return ERR_PTR(-ENODATA);
+	if (len > prop->length)
+		return ERR_PTR(-EOVERFLOW);
+
+	return prop->value;
+}
+
+/**
+ * of_property_read_u32_index - Find and read a u32 from a multi-value property.
+ *
+ * @np:		device node from which the property value is to be read.
+ * @propname:	name of the property to be searched.
+ * @index:	index of the u32 in the list of values
+ * @out_value:	pointer to return value, modified only if no error.
+ *
+ * Search for a property in a device node and read nth 32-bit value from
+ * it. Returns 0 on success, -EINVAL if the property does not exist,
+ * -ENODATA if property does not have a value, and -EOVERFLOW if the
+ * property data isn't large enough.
+ *
+ * The out_value is modified only if a valid u32 value can be decoded.
+ */
+int of_property_read_u32_index(const struct device_node *np,
+				       const char *propname,
+				       u32 index, u32 *out_value)
+{
+	const u32 *val = of_find_property_value_of_size(np, propname,
+					((index + 1) * sizeof(*out_value)));
+
+	if (IS_ERR(val))
+		return PTR_ERR(val);
+
+	*out_value = be32_to_cpup(((__be32 *)val) + index);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(of_property_read_u32_index);
+#endif /* CONFIG_OF */

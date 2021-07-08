@@ -646,8 +646,10 @@ mwifiex_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	}
 
 	tx_info = MWIFIEX_SKB_TXCB(skb);
+	memset(tx_info, 0, sizeof(*tx_info));
 	tx_info->bss_num = priv->bss_num;
 	tx_info->bss_type = priv->bss_type;
+	tx_info->pkt_len = skb->len;
 
 	/* Record the current time the packet was queued; used to
 	 * determine the amount of time the packet was queued in
@@ -745,7 +747,11 @@ static struct net_device_stats *mwifiex_get_stats(struct net_device *dev)
 	return &priv->stats;
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,13,0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,14,0)
+static u16
+mwifiex_netdev_select_wmm_queue(struct net_device *dev, struct sk_buff *skb,
+				void *accel_priv, select_queue_fallback_t fallback)
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3,13,0)
 static u16
 mwifiex_netdev_select_wmm_queue(struct net_device *dev, struct sk_buff *skb,
 				void *accel_priv)
@@ -754,7 +760,7 @@ static u16
 mwifiex_netdev_select_wmm_queue(struct net_device *dev, struct sk_buff *skb)
 #endif
 {
-	skb->priority = cfg80211_classify8021d(skb);
+	skb->priority = cfg80211_classify8021d(skb, NULL);
 	return mwifiex_1d_to_wmm_queue[skb->priority];
 }
 
@@ -997,12 +1003,8 @@ int mwifiex_remove_card(struct mwifiex_adapter *adapter, struct semaphore *sem)
 		rtnl_unlock();
 	}
 
-	priv = adapter->priv[0];
-	if (!priv || !priv->wdev)
-		goto exit_remove;
-
-	wiphy_unregister(priv->wdev->wiphy);
-	wiphy_free(priv->wdev->wiphy);
+	wiphy_unregister(adapter->wiphy);
+	wiphy_free(adapter->wiphy);
 
 	mwifiex_terminate_workqueue(adapter);
 

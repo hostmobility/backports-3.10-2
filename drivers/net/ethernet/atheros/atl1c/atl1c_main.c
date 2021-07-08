@@ -1513,30 +1513,39 @@ static struct net_device_stats *atl1c_get_stats(struct net_device *netdev)
 	struct net_device_stats *net_stats = &netdev->stats;
 
 	atl1c_update_hw_stats(adapter);
-	net_stats->rx_packets = hw_stats->rx_ok;
-	net_stats->tx_packets = hw_stats->tx_ok;
 	net_stats->rx_bytes   = hw_stats->rx_byte_cnt;
 	net_stats->tx_bytes   = hw_stats->tx_byte_cnt;
 	net_stats->multicast  = hw_stats->rx_mcast;
 	net_stats->collisions = hw_stats->tx_1_col +
-				hw_stats->tx_2_col * 2 +
-				hw_stats->tx_late_col + hw_stats->tx_abort_col;
-	net_stats->rx_errors  = hw_stats->rx_frag + hw_stats->rx_fcs_err +
-				hw_stats->rx_len_err + hw_stats->rx_sz_ov +
-				hw_stats->rx_rrd_ov + hw_stats->rx_align_err;
+				hw_stats->tx_2_col +
+				hw_stats->tx_late_col +
+				hw_stats->tx_abort_col;
+
+	net_stats->rx_errors  = hw_stats->rx_frag +
+				hw_stats->rx_fcs_err +
+				hw_stats->rx_len_err +
+				hw_stats->rx_sz_ov +
+				hw_stats->rx_rrd_ov +
+				hw_stats->rx_align_err +
+				hw_stats->rx_rxf_ov;
+
 	net_stats->rx_fifo_errors   = hw_stats->rx_rxf_ov;
 	net_stats->rx_length_errors = hw_stats->rx_len_err;
 	net_stats->rx_crc_errors    = hw_stats->rx_fcs_err;
 	net_stats->rx_frame_errors  = hw_stats->rx_align_err;
-	net_stats->rx_over_errors   = hw_stats->rx_rrd_ov + hw_stats->rx_rxf_ov;
+	net_stats->rx_dropped       = hw_stats->rx_rrd_ov;
 
-	net_stats->rx_missed_errors = hw_stats->rx_rrd_ov + hw_stats->rx_rxf_ov;
+	net_stats->tx_errors = hw_stats->tx_late_col +
+			       hw_stats->tx_abort_col +
+			       hw_stats->tx_underrun +
+			       hw_stats->tx_trunc;
 
-	net_stats->tx_errors = hw_stats->tx_late_col + hw_stats->tx_abort_col +
-				hw_stats->tx_underrun + hw_stats->tx_trunc;
 	net_stats->tx_fifo_errors    = hw_stats->tx_underrun;
 	net_stats->tx_aborted_errors = hw_stats->tx_abort_col;
 	net_stats->tx_window_errors  = hw_stats->tx_late_col;
+
+	net_stats->rx_packets = hw_stats->rx_ok + net_stats->rx_errors;
+	net_stats->tx_packets = hw_stats->tx_ok + net_stats->tx_errors;
 
 	return net_stats;
 }
@@ -2809,9 +2818,8 @@ static const struct pci_error_handlers atl1c_err_handler = {
 	.resume = atl1c_io_resume,
 };
 
-compat_pci_suspend(atl1c_suspend)
-compat_pci_resume(atl1c_resume)
-
+compat_pci_suspend(atl1c_suspend);
+compat_pci_resume(atl1c_resume);
 static SIMPLE_DEV_PM_OPS(atl1c_pm_ops, atl1c_suspend, atl1c_resume);
 
 static struct pci_driver atl1c_driver = {
@@ -2824,8 +2832,8 @@ static struct pci_driver atl1c_driver = {
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,29))
 	.driver.pm = &atl1c_pm_ops,
 #elif defined(CONFIG_PM_SLEEP)
-	.suspend        = atl1c_suspend_compat,
-	.resume         = atl1c_resume_compat,
+	.suspend = atl1c_suspend_compat,
+	.resume = atl1c_resume_compat,
 #endif
 };
 

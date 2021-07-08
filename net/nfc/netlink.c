@@ -16,9 +16,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the
- * Free Software Foundation, Inc.,
- * 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": %s: " fmt, __func__
@@ -71,7 +69,8 @@ static int nfc_genl_send_target(struct sk_buff *msg, struct nfc_target *target,
 {
 	void *hdr;
 
-	hdr = genlmsg_put(msg, NETLINK_CB_PORTID(cb->skb), cb->nlh->nlmsg_seq,
+	hdr = genlmsg_put(msg, NETLINK_CB_PORTID(cb->skb),
+			  cb->nlh->nlmsg_seq,
 			  &nfc_genl_family, flags, NFC_CMD_GET_TARGET);
 	if (!hdr)
 		return -EMSGSIZE;
@@ -546,7 +545,8 @@ static int nfc_genl_dump_devices(struct sk_buff *skb,
 	while (dev) {
 		int rc;
 
-		rc = nfc_genl_send_device(skb, dev, NETLINK_CB_PORTID(cb->skb),
+		rc = nfc_genl_send_device(skb, dev,
+					  NETLINK_CB_PORTID(cb->skb),
 					  cb->nlh->nlmsg_seq, cb, NLM_F_MULTI);
 		if (rc < 0)
 			break;
@@ -665,7 +665,8 @@ static int nfc_genl_get_device(struct sk_buff *skb, struct genl_info *info)
 		goto out_putdev;
 	}
 
-	rc = nfc_genl_send_device(msg, dev, genl_info_snd_portid(info), info->snd_seq,
+	rc = nfc_genl_send_device(msg, dev, genl_info_snd_portid(info),
+				  info->snd_seq,
 				  NULL, 0);
 	if (rc < 0)
 		goto out_free;
@@ -916,7 +917,8 @@ static int nfc_genl_llc_get_params(struct sk_buff *skb, struct genl_info *info)
 		goto exit;
 	}
 
-	rc = nfc_genl_send_params(msg, local, genl_info_snd_portid(info), info->snd_seq);
+	rc = nfc_genl_send_params(msg, local, genl_info_snd_portid(info),
+				  info->snd_seq);
 
 exit:
 	device_unlock(&dev->dev);
@@ -1499,7 +1501,8 @@ static int nfc_genl_rcv_nl_event(struct notifier_block *this,
 	if (event != NETLINK_URELEASE || n->protocol != NETLINK_GENERIC)
 		goto out;
 
-	pr_debug("NETLINK_URELEASE event from id %d\n", netlink_notify_portid(n));
+	pr_debug("NETLINK_URELEASE event from id %d\n",
+		 netlink_notify_portid(n));
 
 	w = kmalloc(sizeof(*w), GFP_ATOMIC);
 	if (w) {

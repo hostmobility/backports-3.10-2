@@ -15,7 +15,6 @@ ifeq ($(CONFIG_OF),y)
 endif
 
 obj-$(CPTCFG_VIDEO_V4L2) += videodev.o
-obj-$(CPTCFG_VIDEO_V4L2_INT_DEVICE) += v4l2-int-device.o
 obj-$(CPTCFG_VIDEO_V4L2) += v4l2-common.o
 obj-$(CPTCFG_VIDEO_V4L2) += v4l2-dv-timings.o
 

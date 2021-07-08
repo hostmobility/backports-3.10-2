@@ -33,7 +33,6 @@
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/lockdep.h>
-#include <linux/init.h>
 #include <linux/pci.h>
 #include <linux/dma-mapping.h>
 #include <linux/delay.h>
@@ -3447,10 +3446,10 @@ il_init_geos(struct il_priv *il)
 
 		if (il_is_channel_valid(ch)) {
 			if (!(ch->flags & EEPROM_CHANNEL_IBSS))
-				geo_ch->flags |= IEEE80211_CHAN_NO_IBSS;
+				geo_ch->flags |= IEEE80211_CHAN_NO_IR;
 
 			if (!(ch->flags & EEPROM_CHANNEL_ACTIVE))
-				geo_ch->flags |= IEEE80211_CHAN_PASSIVE_SCAN;
+				geo_ch->flags |= IEEE80211_CHAN_NO_IR;
 
 			if (ch->flags & EEPROM_CHANNEL_RADAR)
 				geo_ch->flags |= IEEE80211_CHAN_RADAR;
@@ -3748,10 +3747,10 @@ il_full_rxon_required(struct il_priv *il)
 
 	/* These items are only settable from the full RXON command */
 	CHK(!il_is_associated(il));
-	CHK(!ether_addr_equal(staging->bssid_addr, active->bssid_addr));
-	CHK(!ether_addr_equal(staging->node_addr, active->node_addr));
-	CHK(!ether_addr_equal(staging->wlap_bssid_addr,
-			      active->wlap_bssid_addr));
+	CHK(!ether_addr_equal_64bits(staging->bssid_addr, active->bssid_addr));
+	CHK(!ether_addr_equal_64bits(staging->node_addr, active->node_addr));
+	CHK(!ether_addr_equal_64bits(staging->wlap_bssid_addr,
+				     active->wlap_bssid_addr));
 	CHK_NEQ(staging->dev_type, active->dev_type);
 	CHK_NEQ(staging->channel, active->channel);
 	CHK_NEQ(staging->air_propagation, active->air_propagation);
@@ -4938,11 +4937,9 @@ il_pci_resume(struct device *device)
 	return 0;
 }
 
-compat_pci_suspend(il_pci_suspend)
-compat_pci_resume(il_pci_resume)
-
+compat_pci_suspend(il_pci_suspend);
+compat_pci_resume(il_pci_resume);
 SIMPLE_DEV_PM_OPS(il_pm_ops, il_pci_suspend, il_pci_resume);
-
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,29))
 EXPORT_SYMBOL(il_pm_ops);
 #else

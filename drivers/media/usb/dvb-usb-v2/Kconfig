@@ -144,6 +144,7 @@ config DVB_USB_MXL111SF
 	  Say Y here to support the MxL111SF USB2.0 DTV receiver.
 
 config DVB_USB_RTL28XXU
+	depends on !BACKPORT_KERNEL_3_7
 	tristate "Realtek RTL28xxU DVB USB support"
 	depends on m
 	depends on DVB_USB_V2

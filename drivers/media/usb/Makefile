@@ -10,7 +10,6 @@ obj-$(CPTCFG_USB_VIDEO_CLASS)	+= uvc/
 obj-$(CPTCFG_USB_GSPCA)         += gspca/
 obj-$(CPTCFG_USB_PWC)           += pwc/
 obj-$(CPTCFG_VIDEO_CPIA2) += cpia2/
-obj-$(CPTCFG_USB_SN9C102)       += sn9c102/
 obj-$(CPTCFG_VIDEO_AU0828) += au0828/
 obj-$(CPTCFG_VIDEO_HDPVR)	+= hdpvr/
 obj-$(CPTCFG_VIDEO_PVRUSB2) += pvrusb2/

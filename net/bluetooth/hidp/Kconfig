@@ -1,6 +1,6 @@
 config BT_HIDP
-	depends on !BACKPORT_KERNEL_2_6_28
-	depends on !BACKPORT_KERNEL_2_6_33
+	depends on !BACKPORT_KERNEL_2_6_39
+	depends on !BACKPORT_KERNEL_2_6_39
 	tristate "HIDP protocol support"
 	depends on m
 	depends on BT && INPUT

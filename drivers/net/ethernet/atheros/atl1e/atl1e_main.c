@@ -313,6 +313,7 @@ static void atl1e_set_multi(struct net_device *netdev)
 	}
 }
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,39))
 static void __atl1e_rx_mode(netdev_features_t features, u32 *mac_ctrl_data)
 {
 
@@ -339,6 +340,7 @@ static void atl1e_rx_mode(struct net_device *netdev,
 	AT_WRITE_REG(&adapter->hw, REG_MAC_CTRL, mac_ctrl_data);
 	atl1e_irq_enable(adapter);
 }
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,39)) */
 
 
 static void __atl1e_vlan_mode(netdev_features_t features, u32 *mac_ctrl_data)
@@ -1179,31 +1181,39 @@ static struct net_device_stats *atl1e_get_stats(struct net_device *netdev)
 	struct atl1e_hw_stats  *hw_stats = &adapter->hw_stats;
 	struct net_device_stats *net_stats = &netdev->stats;
 
-	net_stats->rx_packets = hw_stats->rx_ok;
-	net_stats->tx_packets = hw_stats->tx_ok;
 	net_stats->rx_bytes   = hw_stats->rx_byte_cnt;
 	net_stats->tx_bytes   = hw_stats->tx_byte_cnt;
 	net_stats->multicast  = hw_stats->rx_mcast;
 	net_stats->collisions = hw_stats->tx_1_col +
-				hw_stats->tx_2_col * 2 +
-				hw_stats->tx_late_col + hw_stats->tx_abort_col;
+				hw_stats->tx_2_col +
+				hw_stats->tx_late_col +
+				hw_stats->tx_abort_col;
 
-	net_stats->rx_errors  = hw_stats->rx_frag + hw_stats->rx_fcs_err +
-				hw_stats->rx_len_err + hw_stats->rx_sz_ov +
-				hw_stats->rx_rrd_ov + hw_stats->rx_align_err;
+	net_stats->rx_errors  = hw_stats->rx_frag +
+				hw_stats->rx_fcs_err +
+				hw_stats->rx_len_err +
+				hw_stats->rx_sz_ov +
+				hw_stats->rx_rrd_ov +
+				hw_stats->rx_align_err +
+				hw_stats->rx_rxf_ov;
+
 	net_stats->rx_fifo_errors   = hw_stats->rx_rxf_ov;
 	net_stats->rx_length_errors = hw_stats->rx_len_err;
 	net_stats->rx_crc_errors    = hw_stats->rx_fcs_err;
 	net_stats->rx_frame_errors  = hw_stats->rx_align_err;
-	net_stats->rx_over_errors   = hw_stats->rx_rrd_ov + hw_stats->rx_rxf_ov;
+	net_stats->rx_dropped       = hw_stats->rx_rrd_ov;
 
-	net_stats->rx_missed_errors = hw_stats->rx_rrd_ov + hw_stats->rx_rxf_ov;
+	net_stats->tx_errors = hw_stats->tx_late_col +
+			       hw_stats->tx_abort_col +
+			       hw_stats->tx_underrun +
+			       hw_stats->tx_trunc;
 
-	net_stats->tx_errors = hw_stats->tx_late_col + hw_stats->tx_abort_col +
-			       hw_stats->tx_underrun + hw_stats->tx_trunc;
 	net_stats->tx_fifo_errors    = hw_stats->tx_underrun;
 	net_stats->tx_aborted_errors = hw_stats->tx_abort_col;
 	net_stats->tx_window_errors  = hw_stats->tx_late_col;
+
+	net_stats->rx_packets = hw_stats->rx_ok + net_stats->rx_errors;
+	net_stats->tx_packets = hw_stats->tx_ok + net_stats->tx_errors;
 
 	return net_stats;
 }
@@ -2441,7 +2451,7 @@ err_reset:
 err_register:
 err_sw_init:
 err_eeprom:
-	iounmap(adapter->hw.hw_addr);
+	pci_iounmap(pdev, adapter->hw.hw_addr);
 err_init_netdev:
 err_ioremap:
 	free_netdev(netdev);
@@ -2479,7 +2489,7 @@ static void atl1e_remove(struct pci_dev *pdev)
 	unregister_netdev(netdev);
 	atl1e_free_ring_resources(adapter);
 	atl1e_force_ps(&adapter->hw);
-	iounmap(adapter->hw.hw_addr);
+	pci_iounmap(pdev, adapter->hw.hw_addr);
 	pci_release_regions(pdev);
 	free_netdev(netdev);
 	pci_disable_device(pdev);

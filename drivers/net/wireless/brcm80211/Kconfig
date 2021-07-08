@@ -6,13 +6,12 @@ config BRCMSMAC
 	tristate "Broadcom IEEE802.11n PCIe SoftMAC WLAN driver"
 	depends on m
 	depends on MAC80211
-	depends on BCMA
+	depends on BCMA_POSSIBLE
+	select BCMA
 	select NEW_LEDS if BCMA_DRIVER_GPIO
 	select LEDS_CLASS if BCMA_DRIVER_GPIO
 	select BRCMUTIL
 	select BACKPORT_FW_LOADER
-	depends on CRC_CCITT
-	select BACKPORT_CRC8
 	select BACKPORT_CORDIC
 	---help---
 	  This module adds support for PCIe wireless adapters based on Broadcom

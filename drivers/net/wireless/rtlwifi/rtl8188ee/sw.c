@@ -390,7 +390,6 @@ MODULE_PARM_DESC(debug, "Set debug level (0-5) (default 0)");
 
 compat_pci_suspend(rtl_pci_suspend);
 compat_pci_resume(rtl_pci_resume);
-
 static SIMPLE_DEV_PM_OPS(rtlwifi_pm_ops, rtl_pci_suspend, rtl_pci_resume);
 
 static struct pci_driver rtl88ee_driver = {
