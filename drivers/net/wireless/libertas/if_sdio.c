@@ -498,7 +498,7 @@ static int if_sdio_prog_helper(struct if_sdio_card *card,
 		 */
 		mdelay(2);
 
-		chunk_size = min(size, (size_t)60);
+		chunk_size = min_t(size_t, size, 60);
 
 		*((__le32*)chunk_buffer) = cpu_to_le32(chunk_size);
 		memcpy(chunk_buffer + 4, firmware, chunk_size);
@@ -639,7 +639,7 @@ static int if_sdio_prog_real(struct if_sdio_card *card,
 			req_size = size;
 
 		while (req_size) {
-			chunk_size = min(req_size, (size_t)512);
+			chunk_size = min_t(size_t, req_size, 512);
 
 			memcpy(chunk_buffer, firmware, chunk_size);
 /*
@@ -708,20 +708,16 @@ static void if_sdio_do_prog_firmware(struct lbs_private *priv, int ret,
 
 	ret = if_sdio_prog_helper(card, helper);
 	if (ret)
-		goto out;
+		return;
 
 	lbs_deb_sdio("Helper firmware loaded\n");
 
 	ret = if_sdio_prog_real(card, mainfw);
 	if (ret)
-		goto out;
+		return;
 
 	lbs_deb_sdio("Firmware loaded\n");
 	if_sdio_finish_power_on(card);
-
-out:
-	release_firmware(helper);
-	release_firmware(mainfw);
 }
 
 static int if_sdio_prog_firmware(struct if_sdio_card *card)
@@ -853,7 +849,7 @@ static void if_sdio_finish_power_on(struct if_sdio_card *card)
 			card->started = true;
 			/* Tell PM core that we don't need the card to be
 			 * powered now */
-			pm_runtime_put_noidle(&func->dev);
+			pm_runtime_put(&func->dev);
 		}
 	}
 
@@ -877,7 +873,6 @@ static int if_sdio_power_on(struct if_sdio_card *card)
 	if (ret)
 		goto release;
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32))
 	/* For 1-bit transfers to the 8686 model, we need to enable the
 	 * interrupt flag in the CCCR register. Set the MMC_QUIRK_LENIENT_FN0
 	 * bit to allow access to non-vendor registers. */
@@ -896,7 +891,6 @@ static int if_sdio_power_on(struct if_sdio_card *card)
 		if (ret)
 			goto disable;
 	}
-#endif
 
 	card->ioport = sdio_readb(func, IF_SDIO_IOPORT, &ret);
 	if (ret)
@@ -913,8 +907,8 @@ static int if_sdio_power_on(struct if_sdio_card *card)
 	sdio_release_host(func);
 	ret = if_sdio_prog_firmware(card);
 	if (ret) {
-		sdio_disable_func(func);
-		return ret;
+		sdio_claim_host(func);
+		goto disable;
 	}
 
 	return 0;
@@ -1345,7 +1339,6 @@ static void if_sdio_remove(struct sdio_func *func)
 	lbs_deb_leave(LBS_DEB_SDIO);
 }
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,34))
 static int if_sdio_suspend(struct device *dev)
 {
 	struct sdio_func *func = dev_to_sdio_func(dev);
@@ -1404,18 +1397,15 @@ static const struct dev_pm_ops if_sdio_pm_ops = {
 	.suspend	= if_sdio_suspend,
 	.resume		= if_sdio_resume,
 };
-#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,34)) */
 
 static struct sdio_driver if_sdio_driver = {
 	.name		= "libertas_sdio",
 	.id_table	= if_sdio_ids,
 	.probe		= if_sdio_probe,
 	.remove		= if_sdio_remove,
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,34))
 	.drv = {
 		.pm = &if_sdio_pm_ops,
 	},
-#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,34)) */
 };
 
 /*******************************************************************/

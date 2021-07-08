@@ -8,17 +8,6 @@
  */
 #include <linux/printk.h>
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25))
-/**
- * The following things are out of ./include/linux/kernel.h
- * The new iwlwifi driver is using them.
- */
-#define strict_strtoul LINUX_BACKPORT(strict_strtoul)
-extern int strict_strtoul(const char *, unsigned int, unsigned long *);
-#define strict_strtol LINUX_BACKPORT(strict_strtol)
-extern int strict_strtol(const char *, unsigned int, long *);
-#endif /* (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25)) */
-
 /*
  * This backports:
  *
@@ -29,26 +18,6 @@ extern int strict_strtol(const char *, unsigned int, long *);
  */
 #ifndef SIZE_MAX
 #define SIZE_MAX    (~(size_t)0)
-#endif
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
-extern const char hex_asc[];
-#endif
-
-#ifndef hex_asc_hi
-#define hex_asc_hi(x)	hex_asc[((x) & 0xf0) >> 4]
-#endif
-#ifndef hex_asc_lo
-#define hex_asc_lo(x)	hex_asc[((x) & 0x0f)]
-#endif
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,2,0)
-static inline char *hex_byte_pack(char *buf, u8 byte)
-{
-	*buf++ = hex_asc_hi(byte);
-	*buf++ = hex_asc_lo(byte);
-	return buf;
-}
 #endif
 
 /* This backports:
@@ -64,109 +33,6 @@ static inline char *hex_byte_pack(char *buf, u8 byte)
 	({ unsigned long long _tmp = (ll)+(d)-1; do_div(_tmp, d); _tmp; })
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,0,0)
-int __must_check kstrtoull_from_user(const char __user *s, size_t count, unsigned int base, unsigned long long *res);
-int __must_check kstrtoll_from_user(const char __user *s, size_t count, unsigned int base, long long *res);
-int __must_check kstrtoul_from_user(const char __user *s, size_t count, unsigned int base, unsigned long *res);
-int __must_check kstrtol_from_user(const char __user *s, size_t count, unsigned int base, long *res);
-int __must_check kstrtouint_from_user(const char __user *s, size_t count, unsigned int base, unsigned int *res);
-int __must_check kstrtoint_from_user(const char __user *s, size_t count, unsigned int base, int *res);
-int __must_check kstrtou16_from_user(const char __user *s, size_t count, unsigned int base, u16 *res);
-int __must_check kstrtos16_from_user(const char __user *s, size_t count, unsigned int base, s16 *res);
-int __must_check kstrtou8_from_user(const char __user *s, size_t count, unsigned int base, u8 *res);
-int __must_check kstrtos8_from_user(const char __user *s, size_t count, unsigned int base, s8 *res);
-
-static inline int __must_check kstrtou64_from_user(const char __user *s, size_t count, unsigned int base, u64 *res)
-{
-	return kstrtoull_from_user(s, count, base, res);
-}
-
-static inline int __must_check kstrtos64_from_user(const char __user *s, size_t count, unsigned int base, s64 *res)
-{
-	return kstrtoll_from_user(s, count, base, res);
-}
-
-static inline int __must_check kstrtou32_from_user(const char __user *s, size_t count, unsigned int base, u32 *res)
-{
-	return kstrtouint_from_user(s, count, base, res);
-}
-
-static inline int __must_check kstrtos32_from_user(const char __user *s, size_t count, unsigned int base, s32 *res)
-{
-	return kstrtoint_from_user(s, count, base, res);
-}
-#endif
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,39)
-/* 
- * kstrto* was included in kernel 2.6.38.4 and causes conflicts with the
- * version included in compat-drivers. We use strict_strtol to check if
- * kstrto* is already available.
- */
-#ifndef strict_strtoull
-/* Internal, do not use. */
-int __must_check _kstrtoul(const char *s, unsigned int base, unsigned long *res);
-int __must_check _kstrtol(const char *s, unsigned int base, long *res);
-
-int __must_check kstrtoull(const char *s, unsigned int base, unsigned long long *res);
-int __must_check kstrtoll(const char *s, unsigned int base, long long *res);
-static inline int __must_check kstrtoul(const char *s, unsigned int base, unsigned long *res)
-{
-	/*
-	 * We want to shortcut function call, but
-	 * __builtin_types_compatible_p(unsigned long, unsigned long long) = 0.
-	 */
-	if (sizeof(unsigned long) == sizeof(unsigned long long) &&
-	    __alignof__(unsigned long) == __alignof__(unsigned long long))
-		return kstrtoull(s, base, (unsigned long long *)res);
-	else
-		return _kstrtoul(s, base, res);
-}
-
-static inline int __must_check kstrtol(const char *s, unsigned int base, long *res)
-{
-	/*
-	 * We want to shortcut function call, but
-	 * __builtin_types_compatible_p(long, long long) = 0.
-	 */
-	if (sizeof(long) == sizeof(long long) &&
-	    __alignof__(long) == __alignof__(long long))
-		return kstrtoll(s, base, (long long *)res);
-	else
-		return _kstrtol(s, base, res);
-}
-
-int __must_check kstrtouint(const char *s, unsigned int base, unsigned int *res);
-int __must_check kstrtoint(const char *s, unsigned int base, int *res);
-
-static inline int __must_check kstrtou64(const char *s, unsigned int base, u64 *res)
-{
-	return kstrtoull(s, base, res);
-}
-
-static inline int __must_check kstrtos64(const char *s, unsigned int base, s64 *res)
-{
-	return kstrtoll(s, base, res);
-}
-
-static inline int __must_check kstrtou32(const char *s, unsigned int base, u32 *res)
-{
-	return kstrtouint(s, base, res);
-}
-
-static inline int __must_check kstrtos32(const char *s, unsigned int base, s32 *res)
-{
-	return kstrtoint(s, base, res);
-}
-
-int __must_check kstrtou16(const char *s, unsigned int base, u16 *res);
-int __must_check kstrtos16(const char *s, unsigned int base, s16 *res);
-int __must_check kstrtou8(const char *s, unsigned int base, u8 *res);
-int __must_check kstrtos8(const char *s, unsigned int base, s8 *res);
-#endif /* ifndef strict_strtol */
-
-#endif /* < 2.6.39 */
-
 #ifndef USHRT_MAX
 #define USHRT_MAX      ((u16)(~0U))
 #endif
@@ -179,9 +45,24 @@ int __must_check kstrtos8(const char *s, unsigned int base, s8 *res);
 #define SHRT_MIN       ((s16)(-SHRT_MAX - 1))
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,35)
-#define hex_to_bin LINUX_BACKPORT(hex_to_bin)
-int hex_to_bin(char ch);
+#ifndef U8_MAX
+#define U8_MAX		((u8)~0U)
+#endif
+
+#ifndef S8_MAX
+#define S8_MAX		((s8)(U8_MAX>>1))
+#endif
+
+#ifndef S8_MIN
+#define S8_MIN		((s8)(-S8_MAX - 1))
+#endif
+
+#ifndef U16_MAX
+#define U16_MAX		((u16)~0U)
+#endif
+
+#ifndef U32_MAX
+#define U32_MAX		((u32)~0U)
 #endif
 
 #ifndef __round_mask
@@ -204,12 +85,6 @@ int hex_to_bin(char ch);
 
 #ifndef lower_32_bits
 #define lower_32_bits(n) ((u32)(n))
-#endif
-
-#ifndef USHORT_MAX
-#define USHORT_MAX      ((u16)(~0U))
-#define SHORT_MAX       ((s16)(USHORT_MAX>>1))
-#define SHORT_MIN       (-SHORT_MAX - 1)
 #endif
 
 #ifndef clamp
@@ -240,6 +115,21 @@ int hex_to_bin(char ch);
 	__val = __val < __min ? __min: __val;   \
 	__val > __max ? __max: __val; })
 #endif
+
+#ifndef rounddown
+#define rounddown(x, y) (				\
+{							\
+	typeof(x) __x = (x);				\
+	__x - (__x % (y));				\
+}							\
+)
+#endif /* rounddown */
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,2,0)
+/* kernels before 3.2 didn't have error checking for the function */
+#define hex2bin LINUX_BACKPORT(hex2bin)
+int __must_check hex2bin(u8 *dst, const char *src, size_t count);
+#endif /* < 3.2 */
 
 #endif /* __BACKPORT_KERNEL_H */
 

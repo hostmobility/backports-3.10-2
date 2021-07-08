@@ -6,7 +6,7 @@ ifeq ($(KERNELRELEASE),)
 
 MAKEFLAGS += --no-print-directory
 SHELL := /bin/bash
-BACKPORT_PWD := $(shell pwd)
+BACKPORT_DIR := $(shell pwd)
 
 KMODDIR ?= updates
 ifneq ($(origin KLIB), undefined)
@@ -20,7 +20,7 @@ KERNEL_CONFIG := $(KLIB_BUILD)/.config
 KERNEL_MAKEFILE := $(KLIB_BUILD)/Makefile
 CONFIG_MD5 := $(shell md5sum $(KERNEL_CONFIG) 2>/dev/null | sed 's/\s.*//')
 
-export KLIB KLIB_BUILD BACKPORT_PWD KMODDIR KMODPATH_ARG
+export KLIB KLIB_BUILD BACKPORT_DIR KMODDIR KMODPATH_ARG
 
 # disable built-in rules for this file
 .SUFFIXES:
@@ -93,7 +93,7 @@ mrproper:
 		print=0									;\
 		for v in $$kvers ; do							\
 			if [ "$$print" = "1" ] ; then					\
-				echo config BACKPORT_KERNEL_$$(echo $$v | tr . _)	;\
+				echo config KERNEL_$$(echo $$v | tr . _)	;\
 				echo "    def_bool y"					;\
 			fi								;\
 			if [ "$$v" = "$$kver" ] ; then print=1 ; fi			;\
@@ -138,7 +138,6 @@ help: defconfig-help
 	@echo ""
 	@echo "Configuration targets:"
 	@echo "  menuconfig      - Update current config utilising a menu based program"
-	@echo "  allyesconfig    - New config where all options are accepted with yes"
 	@echo "  oldconfig       - Update current config utilising a provided .config as base"
 	@echo "  oldaskconfig    - ??"
 	@echo "  silentoldconfig - Same as oldconfig, but quietly, additionally update deps"
@@ -160,5 +159,5 @@ help: defconfig-help
 	@echo ""
 	@echo "Execute "make" or "make all" to build all targets marked with [*]"
 else
-include $(BACKPORT_PWD)/Makefile.kernel
+include $(BACKPORT_DIR)/Makefile.kernel
 endif

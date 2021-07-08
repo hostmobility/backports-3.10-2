@@ -1,18 +1,23 @@
-#ifndef __BACKPORT_LINUX_DEBUGFS_H
-#define __BACKPORT_LINUX_DEBUGFS_H
+#ifndef __BACKPORT_DEBUGFS_H_
+#define __BACKPORT_DEBUGFS_H_
 #include_next <linux/debugfs.h>
 #include <linux/version.h>
-
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,27)
-#define debugfs_remove_recursive LINUX_BACKPORT(debugfs_remove_recursive)
+#include <generated/utsrelease.h>
 
 #if defined(CONFIG_DEBUG_FS)
-void debugfs_remove_recursive(struct dentry *dentry);
+struct dentry *debugfs_create_devm_seqfile(struct device *dev, const char *name,
+					   struct dentry *parent,
+					   int (*read_fn)(struct seq_file *s,
+							  void *data));
 #else
-static inline void debugfs_remove_recursive(struct dentry *dentry)
-{ }
-#endif
-#endif /* < 2.6.27 */
+static inline struct dentry *debugfs_create_devm_seqfile(struct device *dev,
+							 const char *name,
+							 struct dentry *parent,
+					   int (*read_fn)(struct seq_file *s,
+							  void *data))
+{
+	return ERR_PTR(-ENODEV);
+}
+#endif /* CONFIG_DEBUG_FS */
 
-#endif /* __BACKPORT_LINUX_DEBUGFS_H */
+#endif /* __BACKPORT_DEBUGFS_H_ */

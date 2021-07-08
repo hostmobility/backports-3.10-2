@@ -74,22 +74,15 @@ static int dvb_device_open(struct inode *inode, struct file *file)
 
 	if (dvbdev && dvbdev->fops) {
 		int err = 0;
-		const struct file_operations *old_fops;
+		const struct file_operations *new_fops;
 
-		file->private_data = dvbdev;
-		old_fops = file->f_op;
-		file->f_op = fops_get(dvbdev->fops);
-		if (file->f_op == NULL) {
-			file->f_op = old_fops;
+		new_fops = fops_get(dvbdev->fops);
+		if (!new_fops)
 			goto fail;
-		}
-		if(file->f_op->open)
+		file->private_data = dvbdev;
+		replace_fops(file, new_fops);
+		if (file->f_op->open)
 			err = file->f_op->open(inode,file);
-		if (err) {
-			fops_put(file->f_op);
-			file->f_op = fops_get(old_fops);
-		}
-		fops_put(old_fops);
 		up_read(&minor_rwsem);
 		mutex_unlock(&dvbdev_mutex);
 		return err;
@@ -449,7 +442,11 @@ static int dvb_uevent(struct device *dev, struct kobj_uevent_env *env)
 	return 0;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,3,0)
 static char *dvb_devnode(struct device *dev, umode_t *mode)
+#else
+static char *dvb_devnode(struct device *dev, mode_t *mode)
+#endif
 {
 	struct dvb_device *dvbdev = dev_get_drvdata(dev);
 

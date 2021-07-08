@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/scatterlist.h>
 #include <linux/dma-attrs.h>
+#include <linux/device.h>
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,3,0)
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(3,6,0)
 #include <linux/dma-direction.h>
@@ -19,6 +20,7 @@
 #endif /* LINUX_VERSION_CODE <= KERNEL_VERSION(3,6,0) */
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3,3,0) */
 
+#if RHEL_RELEASE_CODE < RHEL_RELEASE_VERSION(7,0)
 /*
  * Create scatter-list for the already allocated DMA buffer.
  */
@@ -36,3 +38,4 @@ int dma_common_get_sgtable(struct device *dev, struct sg_table *sgt,
 	return 0;
 }
 EXPORT_SYMBOL_GPL(dma_common_get_sgtable);
+#endif /* RHEL_RELEASE_CODE < RHEL_RELEASE_VERSION(7,0) */

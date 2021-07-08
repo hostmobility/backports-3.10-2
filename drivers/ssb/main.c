@@ -374,7 +374,8 @@ static ssize_t \
 attrib##_show(struct device *dev, struct device_attribute *attr, char *buf) \
 { \
 	return sprintf(buf, format_string, dev_to_ssb_dev(dev)->field); \
-}
+} \
+static DEVICE_ATTR_RO(attrib);
 
 ssb_config_attr(core_num, core_index, "%u\n")
 ssb_config_attr(coreid, id.coreid, "0x%04x\n")
@@ -387,16 +388,23 @@ name_show(struct device *dev, struct device_attribute *attr, char *buf)
 	return sprintf(buf, "%s\n",
 		       ssb_core_name(dev_to_ssb_dev(dev)->id.coreid));
 }
+static DEVICE_ATTR_RO(name);
 
-static struct device_attribute ssb_device_attrs[] = {
-	__ATTR_RO(name),
-	__ATTR_RO(core_num),
-	__ATTR_RO(coreid),
-	__ATTR_RO(vendor),
-	__ATTR_RO(revision),
-	__ATTR_RO(irq),
-	__ATTR_NULL,
+static struct attribute *ssb_device_attrs[] = {
+	&dev_attr_name.attr,
+	&dev_attr_core_num.attr,
+	&dev_attr_coreid.attr,
+	&dev_attr_vendor.attr,
+	&dev_attr_revision.attr,
+	&dev_attr_irq.attr,
+	NULL,
 };
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,12,0)
+ATTRIBUTE_GROUPS(ssb_device);
+#else
+#define BP_ATTR_GRP_STRUCT device_attribute
+ATTRIBUTE_GROUPS_BACKPORT(ssb_device);
+#endif
 
 static struct bus_type ssb_bustype = {
 	.name		= "ssb",
@@ -407,7 +415,11 @@ static struct bus_type ssb_bustype = {
 	.suspend	= ssb_device_suspend,
 	.resume		= ssb_device_resume,
 	.uevent		= ssb_device_uevent,
-	.dev_attrs	= ssb_device_attrs,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,12,0)
+	.dev_groups	= ssb_device_groups,
+#else
+	.dev_attrs = ssb_device_dev_attrs,
+#endif
 };
 
 static void ssb_buses_lock(void)
@@ -517,11 +529,7 @@ static int ssb_devices_register(struct ssb_bus *bus)
 			break;
 		case SSB_BUSTYPE_PCMCIA:
 #ifdef CPTCFG_SSB_PCMCIAHOST
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35))
 			sdev->irq = bus->host_pcmcia->irq;
-#else
-			sdev->irq = bus->host_pcmcia->irq.AssignedIRQ;
-#endif
 			dev->parent = &bus->host_pcmcia->dev;
 #endif
 			break;
@@ -557,6 +565,14 @@ static int ssb_devices_register(struct ssb_bus *bus)
 	}
 #endif
 
+#ifdef CPTCFG_SSB_SFLASH
+	if (bus->mipscore.sflash.present) {
+		err = platform_device_register(&ssb_sflash_dev);
+		if (err)
+			pr_err("Error registering serial flash\n");
+	}
+#endif
+
 	return 0;
 error:
 	/* Unwind the already registered devices. */
@@ -586,6 +602,13 @@ static int ssb_attach_queued_buses(void)
 		ssb_pcicore_init(&bus->pcicore);
 		if (bus->bustype == SSB_BUSTYPE_SSB)
 			ssb_watchdog_register(bus);
+
+		err = ssb_gpio_init(bus);
+		if (err == -ENOTSUPP)
+			ssb_dbg("GPIO driver not activated\n");
+		else if (err)
+			ssb_dbg("Error registering GPIO driver: %i\n", err);
+
 		ssb_bus_may_powerdown(bus);
 
 		err = ssb_devices_register(bus);
@@ -823,11 +846,6 @@ static int ssb_bus_register(struct ssb_bus *bus,
 	ssb_chipcommon_init(&bus->chipco);
 	ssb_extif_init(&bus->extif);
 	ssb_mipscore_init(&bus->mipscore);
-	err = ssb_gpio_init(bus);
-	if (err == -ENOTSUPP)
-		ssb_dbg("GPIO driver not activated\n");
-	else if (err)
-		ssb_dbg("Error registering GPIO driver: %i\n", err);
 	err = ssb_fetch_invariants(bus, get_invariants);
 	if (err) {
 		ssb_bus_may_powerdown(bus);
@@ -1452,6 +1470,7 @@ static int __init ssb_modinit(void)
 
 	/* See the comment at the ssb_is_early_boot definition */
 	ssb_is_early_boot = 0;
+	init_ssb_device_attrs();
 	err = bus_register(&ssb_bustype);
 	if (err)
 		return err;

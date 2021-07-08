@@ -13,8 +13,8 @@ export CONFIG_=CPTCFG_
 
 .PHONY: menuconfig
 menuconfig:
-	@$(MAKE) -C kconfig mconf
-	@./kconfig/mconf Kconfig
+	@$(MAKE) -C kconf mconf
+	@./kconf/mconf Kconfig
 
 .PHONY: listnewconfig oldaskconfig oldconfig \
 	silentoldconfig olddefconfig oldnoconfig \
@@ -24,17 +24,22 @@ listnewconfig oldaskconfig oldconfig \
 silentoldconfig olddefconfig oldnoconfig \
 allnoconfig allyesconfig allmodconfig \
 alldefconfig randconfig:
-	@$(MAKE) -C kconfig conf
-	@./kconfig/conf --$@ Kconfig
+	@$(MAKE) -C kconf conf
+	@./kconf/conf --$@ Kconfig
 
 .PHONY: usedefconfig
 usedefconfig:
-	@$(MAKE) -C kconfig conf
-	@./kconfig/conf --defconfig=defconfig Kconfig
+	@$(MAKE) -C kconf conf
+	@./kconf/conf --defconfig=defconfig Kconfig
+
+.PHONY: savedefconfig
+savedefconfig:
+	@$(MAKE) -C kconf conf
+	@./kconf/conf --savedefconfig=defconfig Kconfig
 
 defconfig-%::
-	@$(MAKE) -C kconfig conf
-	@./kconfig/conf --defconfig=defconfigs/$(@:defconfig-%=%) Kconfig
+	@$(MAKE) -C kconf conf
+	@./kconf/conf --defconfig=defconfigs/$(@:defconfig-%=%) Kconfig
 
 .config:
 	@test -f defconfig && $(MAKE) usedefconfig || (			\
@@ -84,13 +89,12 @@ modules: backport-include/backport/autoconf.h
 
 .PHONY: install
 install: modules
-	@$(MAKE) -C $(KLIB_BUILD) M=$(BACKPORT_PWD)			\
+	@$(MAKE) -C $(KLIB_BUILD) M=$(BACKPORT_DIR)			\
 		INSTALL_MOD_DIR=$(KMODDIR) $(KMODPATH_ARG)		\
 		modules_install
 	@./scripts/blacklist.sh $(KLIB)/ $(KLIB)/$(KMODDIR)
 	@./scripts/compress_modules.sh $(KLIB)/$(KMODDIR)
 	@./scripts/check_depmod.sh
-	@./scripts/backport_firmware_install.sh
 	@/sbin/depmod -a
 	@./scripts/update-initramfs.sh $(KLIB)
 	@echo
@@ -100,6 +104,16 @@ install: modules
 
 .PHONY: modules_install
 modules_install: install
+
+.PHONY: uninstall
+uninstall:
+	@./scripts/uninstall.sh
+	@/sbin/depmod -a
+	@./scripts/update-initramfs.sh $(KLIB)
+	@echo
+	@echo Your backported driver modules should be uninstalled now.
+	@echo Reboot.
+	@echo
 
 .PHONY: clean
 clean:

@@ -2,23 +2,34 @@
 #define __BACKPORT_LINUX_WAIT_H
 #include_next <linux/wait.h>
 
-/* This backports:
- *
- * commit 63b2001169e75cd71e917ec953fdab572e3f944a
- * Author: Thomas Gleixner <tglx@linutronix.de>
- * Date:   Thu Dec 1 00:04:00 2011 +0100
- *
- * 	sched/wait: Add __wake_up_all_locked() API
- */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,17,0)
+extern int bit_wait(void *);
+extern int bit_wait_io(void *);
 
-#ifndef wake_up_all_locked
-extern void compat_wake_up_locked(wait_queue_head_t *q, unsigned int mode, int nr);
-#define wake_up_all_locked(x)	compat_wake_up_locked((x), TASK_NORMAL, 0)
+static inline int
+backport_wait_on_bit(void *word, int bit, unsigned mode)
+{
+	return wait_on_bit(word, bit, bit_wait, mode);
+}
+
+static inline int
+backport_wait_on_bit_io(void *word, int bit, unsigned mode)
+{
+	return wait_on_bit(word, bit, bit_wait_io, mode);
+}
+
+#define wait_on_bit LINUX_BACKPORT(wait_on_bit)
+#define wait_on_bit_io LINUX_BACKPORT(wait_on_bit_io)
+
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,28)
-#define wake_up_interruptible_poll(x, m)			\
-	__wake_up(x, TASK_INTERRUPTIBLE, 1, (void *) (m))
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,19,0)
+#define WQ_FLAG_WOKEN		0x02
+
+#define wait_woken LINUX_BACKPORT(wait_woken)
+long wait_woken(wait_queue_t *wait, unsigned mode, long timeout);
+#define wait_woken LINUX_BACKPORT(wait_woken)
+int woken_wake_function(wait_queue_t *wait, unsigned mode, int sync, void *key);
 #endif
 
 #endif /* __BACKPORT_LINUX_WAIT_H */
