@@ -115,22 +115,6 @@ static void wcn36xx_smd_set_sta_ht_params(struct ieee80211_sta *sta,
 	}
 }
 
-static void wcn36xx_smd_set_sta_default_ht_params(
-		struct wcn36xx_hal_config_sta_params *sta_params)
-{
-	sta_params->ht_capable = 1;
-	sta_params->tx_channel_width_set = 1;
-	sta_params->lsig_txop_protection = 1;
-	sta_params->max_ampdu_size = 3;
-	sta_params->max_ampdu_density = 5;
-	sta_params->max_amsdu_size = 0;
-	sta_params->sgi_20Mhz = 1;
-	sta_params->sgi_40mhz = 1;
-	sta_params->green_field_capable = 1;
-	sta_params->delayed_ba_support = 0;
-	sta_params->dsss_cck_mode_40mhz = 1;
-}
-
 static void wcn36xx_smd_set_sta_params(struct wcn36xx *wcn,
 		struct ieee80211_vif *vif,
 		struct ieee80211_sta *sta,
@@ -188,18 +172,15 @@ static void wcn36xx_smd_set_sta_params(struct wcn36xx *wcn,
 			sizeof(priv_sta->supported_rates));
 	} else {
 		wcn36xx_set_default_rates(&sta_params->supported_rates);
-		wcn36xx_smd_set_sta_default_ht_params(sta_params);
 	}
 }
 
 static int wcn36xx_smd_send_and_wait(struct wcn36xx *wcn, size_t len)
 {
 	int ret = 0;
-	unsigned long start;
 	wcn36xx_dbg_dump(WCN36XX_DBG_SMD_DUMP, "HAL >>> ", wcn->hal_buf, len);
 
 	init_completion(&wcn->hal_rsp_compl);
-	start = jiffies;
 	ret = wcn->ctrl_ops->tx(wcn->hal_buf, len);
 	if (ret) {
 		wcn36xx_err("HAL TX failed\n");
@@ -207,13 +188,10 @@ static int wcn36xx_smd_send_and_wait(struct wcn36xx *wcn, size_t len)
 	}
 	if (wait_for_completion_timeout(&wcn->hal_rsp_compl,
 		msecs_to_jiffies(HAL_MSG_TIMEOUT)) <= 0) {
-		wcn36xx_err("Timeout! No SMD response in %dms\n",
-			    HAL_MSG_TIMEOUT);
+		wcn36xx_err("Timeout while waiting SMD response\n");
 		ret = -ETIME;
 		goto out;
 	}
-	wcn36xx_dbg(WCN36XX_DBG_SMD, "SMD command completed in %dms",
-		    jiffies_to_msecs(jiffies - start));
 out:
 	return ret;
 }
@@ -251,22 +229,21 @@ static int wcn36xx_smd_rsp_status_check(void *buf, size_t len)
 
 int wcn36xx_smd_load_nv(struct wcn36xx *wcn)
 {
+	const struct firmware *nv;
 	struct nv_data *nv_d;
 	struct wcn36xx_hal_nv_img_download_req_msg msg_body;
 	int fw_bytes_left;
 	int ret;
 	u16 fm_offset = 0;
 
-	if (!wcn->nv) {
-		ret = request_firmware(&wcn->nv, WLAN_NV_FILE, wcn->dev);
-		if (ret) {
-			wcn36xx_err("Failed to load nv file %s: %d\n",
-				      WLAN_NV_FILE, ret);
-			goto out;
-		}
+	ret = request_firmware(&nv, WLAN_NV_FILE, wcn->dev);
+	if (ret) {
+		wcn36xx_err("Failed to load nv file %s: %d\n",
+			      WLAN_NV_FILE, ret);
+		goto out_free_nv;
 	}
 
-	nv_d = (struct nv_data *)wcn->nv->data;
+	nv_d = (struct nv_data *)nv->data;
 	INIT_HAL_MSG(msg_body, WCN36XX_HAL_DOWNLOAD_NV_REQ);
 
 	msg_body.header.len += WCN36XX_NV_FRAGMENT_SIZE;
@@ -276,7 +253,7 @@ int wcn36xx_smd_load_nv(struct wcn36xx *wcn)
 	mutex_lock(&wcn->hal_mutex);
 
 	do {
-		fw_bytes_left = wcn->nv->size - fm_offset - 4;
+		fw_bytes_left = nv->size - fm_offset - 4;
 		if (fw_bytes_left > WCN36XX_NV_FRAGMENT_SIZE) {
 			msg_body.last_fragment = 0;
 			msg_body.nv_img_buffer_size = WCN36XX_NV_FRAGMENT_SIZE;
@@ -314,7 +291,10 @@ int wcn36xx_smd_load_nv(struct wcn36xx *wcn)
 
 out_unlock:
 	mutex_unlock(&wcn->hal_mutex);
-out:	return ret;
+out_free_nv:
+	release_firmware(nv);
+
+	return ret;
 }
 
 static int wcn36xx_smd_start_rsp(struct wcn36xx *wcn, void *buf, size_t len)
@@ -902,12 +882,11 @@ static int wcn36xx_smd_config_sta_rsp(struct wcn36xx *wcn,
 
 	sta_priv->sta_index = params->sta_index;
 	sta_priv->dpu_desc_index = params->dpu_index;
-	sta_priv->ucast_dpu_sign = params->uc_ucast_sig;
 
 	wcn36xx_dbg(WCN36XX_DBG_HAL,
-		    "hal config sta rsp status %d sta_index %d bssid_index %d uc_ucast_sig %d p2p %d\n",
+		    "hal config sta rsp status %d sta_index %d bssid_index %d p2p %d\n",
 		    params->status, params->sta_index, params->bssid_index,
-		    params->uc_ucast_sig, params->p2p);
+		    params->p2p);
 
 	return 0;
 }
@@ -1122,7 +1101,7 @@ static int wcn36xx_smd_config_bss_rsp(struct wcn36xx *wcn,
 		priv_vif->sta->bss_dpu_desc_index = params->dpu_desc_index;
 	}
 
-	priv_vif->self_ucast_dpu_sign = params->ucast_dpu_signature;
+	priv_vif->ucast_dpu_signature = params->ucast_dpu_signature;
 
 	return 0;
 }
@@ -1155,14 +1134,14 @@ int wcn36xx_smd_config_bss(struct wcn36xx *wcn, struct ieee80211_vif *vif,
 		/* STA */
 		bss->oper_mode = 1;
 		bss->wcn36xx_hal_persona = WCN36XX_HAL_STA_MODE;
-	} else if (vif->type == NL80211_IFTYPE_AP ||
-		   vif->type == NL80211_IFTYPE_MESH_POINT) {
+	} else if (vif->type == NL80211_IFTYPE_AP) {
 		bss->bss_type = WCN36XX_HAL_INFRA_AP_MODE;
 
 		/* AP */
 		bss->oper_mode = 0;
 		bss->wcn36xx_hal_persona = WCN36XX_HAL_STA_SAP_MODE;
-	} else if (vif->type == NL80211_IFTYPE_ADHOC) {
+	} else if (vif->type == NL80211_IFTYPE_ADHOC ||
+		   vif->type == NL80211_IFTYPE_MESH_POINT) {
 		bss->bss_type = WCN36XX_HAL_IBSS_MODE;
 
 		/* STA */
@@ -1313,11 +1292,7 @@ int wcn36xx_smd_send_beacon(struct wcn36xx *wcn, struct ieee80211_vif *vif,
 	memcpy(msg_body.bssid, vif->addr, ETH_ALEN);
 
 	/* TODO need to find out why this is needed? */
-	if (vif->type == NL80211_IFTYPE_MESH_POINT)
-		/* mesh beacon don't need this, so push further down */
-		msg_body.tim_ie_offset = 256;
-	else
-		msg_body.tim_ie_offset = tim_off+4;
+	msg_body.tim_ie_offset = tim_off+4;
 	msg_body.p2p_ie_offset = p2p_off;
 	PREPARE_HAL_BUF(wcn->hal_buf, msg_body);
 
@@ -1641,12 +1616,12 @@ int wcn36xx_smd_keep_alive_req(struct wcn36xx *wcn,
 
 	ret = wcn36xx_smd_send_and_wait(wcn, msg_body.header.len);
 	if (ret) {
-		wcn36xx_err("Sending hal_keep_alive failed\n");
+		wcn36xx_err("Sending hal_exit_bmps failed\n");
 		goto out;
 	}
 	ret = wcn36xx_smd_rsp_status_check(wcn->hal_buf, wcn->hal_rsp_len);
 	if (ret) {
-		wcn36xx_err("hal_keep_alive response failed err=%d\n", ret);
+		wcn36xx_err("hal_exit_bmps response failed err=%d\n", ret);
 		goto out;
 	}
 out:
@@ -1686,7 +1661,8 @@ out:
 	return ret;
 }
 
-void set_feat_caps(u32 *bitmap, enum place_holder_in_cap_bitmap cap)
+static inline void set_feat_caps(u32 *bitmap,
+				 enum place_holder_in_cap_bitmap cap)
 {
 	int arr_idx, bit_idx;
 
@@ -1700,7 +1676,8 @@ void set_feat_caps(u32 *bitmap, enum place_holder_in_cap_bitmap cap)
 	bitmap[arr_idx] |= (1 << bit_idx);
 }
 
-int get_feat_caps(u32 *bitmap, enum place_holder_in_cap_bitmap cap)
+static inline int get_feat_caps(u32 *bitmap,
+				enum place_holder_in_cap_bitmap cap)
 {
 	int arr_idx, bit_idx;
 	int ret = 0;
@@ -1716,7 +1693,8 @@ int get_feat_caps(u32 *bitmap, enum place_holder_in_cap_bitmap cap)
 	return ret;
 }
 
-void clear_feat_caps(u32 *bitmap, enum place_holder_in_cap_bitmap cap)
+static inline void clear_feat_caps(u32 *bitmap,
+				enum place_holder_in_cap_bitmap cap)
 {
 	int arr_idx, bit_idx;
 
@@ -1732,8 +1710,8 @@ void clear_feat_caps(u32 *bitmap, enum place_holder_in_cap_bitmap cap)
 
 int wcn36xx_smd_feature_caps_exchange(struct wcn36xx *wcn)
 {
-	struct wcn36xx_hal_feat_caps_msg msg_body, *rsp;
-	int ret = 0, i;
+	struct wcn36xx_hal_feat_caps_msg msg_body;
+	int ret = 0;
 
 	mutex_lock(&wcn->hal_mutex);
 	INIT_HAL_MSG(msg_body, WCN36XX_HAL_FEATURE_CAPS_EXCHANGE_REQ);
@@ -1747,15 +1725,12 @@ int wcn36xx_smd_feature_caps_exchange(struct wcn36xx *wcn)
 		wcn36xx_err("Sending hal_feature_caps_exchange failed\n");
 		goto out;
 	}
-	if (wcn->hal_rsp_len != sizeof(*rsp)) {
-		wcn36xx_err("Invalid hal_feature_caps_exchange response");
+	ret = wcn36xx_smd_rsp_status_check(wcn->hal_buf, wcn->hal_rsp_len);
+	if (ret) {
+		wcn36xx_err("hal_feature_caps_exchange response failed err=%d\n",
+			    ret);
 		goto out;
 	}
-
-	rsp = (struct wcn36xx_hal_feat_caps_msg *) wcn->hal_buf;
-
-	for (i = 0; i < WCN36XX_HAL_CAPS_SIZE; i++)
-		wcn->fw_feat_caps[i] = rsp->feat_caps[i];
 out:
 	mutex_unlock(&wcn->hal_mutex);
 	return ret;
@@ -1863,7 +1838,7 @@ out:
 int wcn36xx_smd_trigger_ba(struct wcn36xx *wcn, u8 sta_index)
 {
 	struct wcn36xx_hal_trigger_ba_req_msg msg_body;
-	struct wcn36xx_hal_trigger_ba_req_candidate *candidate;
+	struct wcn36xx_hal_trigget_ba_req_candidate *candidate;
 	int ret = 0;
 
 	mutex_lock(&wcn->hal_mutex);
@@ -1874,7 +1849,7 @@ int wcn36xx_smd_trigger_ba(struct wcn36xx *wcn, u8 sta_index)
 	msg_body.header.len += sizeof(*candidate);
 	PREPARE_HAL_BUF(wcn->hal_buf, msg_body);
 
-	candidate = (struct wcn36xx_hal_trigger_ba_req_candidate *)
+	candidate = (struct wcn36xx_hal_trigget_ba_req_candidate *)
 		(wcn->hal_buf + sizeof(msg_body));
 	candidate->sta_index = sta_index;
 	candidate->tid_bitmap = 1;
@@ -2064,27 +2039,22 @@ static void wcn36xx_smd_rsp_process(struct wcn36xx *wcn, void *buf, size_t len)
 	case WCN36XX_HAL_OTA_TX_COMPL_IND:
 	case WCN36XX_HAL_MISSED_BEACON_IND:
 	case WCN36XX_HAL_DELETE_STA_CONTEXT_IND:
-		msg_ind = kmalloc(sizeof(*msg_ind), GFP_KERNEL);
-		if (!msg_ind)
-			goto nomem;
-		msg_ind->msg_len = len;
-		msg_ind->msg = kmemdup(buf, len, GFP_KERNEL);
-		if (!msg_ind->msg) {
-			kfree(msg_ind);
-nomem:
-			/*
-			 * FIXME: Do something smarter then just
-			 * printing an error.
-			 */
-			wcn36xx_err("Run out of memory while handling SMD_EVENT (%d)\n",
-				    msg_header->msg_type);
-			break;
-		}
 		mutex_lock(&wcn->hal_ind_mutex);
-		list_add_tail(&msg_ind->list, &wcn->hal_ind_queue);
-		queue_work(wcn->hal_ind_wq, &wcn->hal_ind_work);
+		msg_ind = kmalloc(sizeof(*msg_ind), GFP_KERNEL);
+		if (msg_ind) {
+			msg_ind->msg_len = len;
+			msg_ind->msg = kmalloc(len, GFP_KERNEL);
+			memcpy(msg_ind->msg, buf, len);
+			list_add_tail(&msg_ind->list, &wcn->hal_ind_queue);
+			queue_work(wcn->hal_ind_wq, &wcn->hal_ind_work);
+			wcn36xx_dbg(WCN36XX_DBG_HAL, "indication arrived\n");
+		}
 		mutex_unlock(&wcn->hal_ind_mutex);
-		wcn36xx_dbg(WCN36XX_DBG_HAL, "indication arrived\n");
+		if (msg_ind)
+			break;
+		/* FIXME: Do something smarter then just printing an error. */
+		wcn36xx_err("Run out of memory while handling SMD_EVENT (%d)\n",
+			    msg_header->msg_type);
 		break;
 	default:
 		wcn36xx_err("SMD_EVENT (%d) not supported\n",

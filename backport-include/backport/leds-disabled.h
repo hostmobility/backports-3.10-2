@@ -8,7 +8,7 @@
  * allows compilation.
  */
 
-#ifdef CPTCFG_BPAUTO_BUILD_LEDS
+#ifdef CPTCFG_BACKPORT_BUILD_LEDS
 #include <linux/list.h>
 #include <linux/spinlock.h>
 #include <linux/rwsem.h>
@@ -161,19 +161,6 @@ static inline void led_trigger_unregister(struct led_trigger *trigger)
 
 static inline void led_trigger_event(struct led_trigger *trigger,
 				     enum led_brightness event)
-{
-}
-
-static inline void led_trigger_blink(struct led_trigger *trigger,
-				     unsigned long *delay_on,
-				     unsigned long *delay_off)
-{
-}
-
-static inline void led_trigger_blink_oneshot(struct led_trigger *trigger,
-					     unsigned long *delay_on,
-					     unsigned long *delay_off,
-					     int invert)
 {
 }
 #endif

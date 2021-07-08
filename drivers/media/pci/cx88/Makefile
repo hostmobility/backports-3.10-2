@@ -11,6 +11,7 @@ obj-$(CPTCFG_VIDEO_CX88_DVB) += cx88-dvb.o
 obj-$(CPTCFG_VIDEO_CX88_VP3054) += cx88-vp3054-i2c.o
 
 ccflags-y += -I$(backport_srctree)/drivers/media/i2c
+ccflags-y += -I$(backport_srctree)/drivers/media/common
 ccflags-y += -I$(backport_srctree)/drivers/media/tuners
 ccflags-y += -I$(backport_srctree)/drivers/media/dvb-core
 ccflags-y += -I$(backport_srctree)/drivers/media/dvb-frontends

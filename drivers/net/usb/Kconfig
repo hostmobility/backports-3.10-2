@@ -1,16 +1,11 @@
 #
 # USB Network devices configuration
 #
-comment "Host-side USB support is needed for USB Network Adapter support"
-	depends on !USB && NET
+comment "Networking support is needed for USB Network Adapter support"
+	depends on USB && !NET
 
-menuconfig USB_NET_DRIVERS
-	tristate "USB Network Adapters"
-	depends on m
-	default USB if USB
+menu "USB Network Adapters"
 	depends on USB && NET
-
-if USB_NET_DRIVERS
 
 config USB_CATC
 	depends on n
@@ -78,7 +73,7 @@ config USB_PEGASUS
 	depends on n
 	tristate "USB Pegasus/Pegasus-II based ethernet device support"
 	depends on m
-	select BPAUTO_MII
+	select BACKPORT_MII
 	---help---
 	  Say Y here if you know you have Pegasus or Pegasus-II based adapter.
 	  If in doubt then look at <file:drivers/net/usb/pegasus.h> for the
@@ -95,7 +90,7 @@ config USB_RTL8150
 	depends on n
 	tristate "USB RTL8150 based ethernet device support"
 	depends on m
-	select BPAUTO_MII
+	select BACKPORT_MII
 	help
 	  Say Y here if you have RTL8150 based usb-ethernet adapter.
 	  Send me <petkan@users.sourceforge.net> any comments you may have.
@@ -106,13 +101,12 @@ config USB_RTL8150
 
 config USB_RTL8152
 	depends on n
-	tristate "Realtek RTL8152/RTL8153 Based USB Ethernet Adapters"
+	tristate "Realtek RTL8152 Based USB 2.0 Ethernet Adapters"
 	depends on m
-	select BPAUTO_MII
+	select BACKPORT_MII
 	help
 	  This option adds support for Realtek RTL8152 based USB 2.0
-	  10/100 Ethernet adapters and RTL8153 based USB 3.0 10/100/1000
-	  Ethernet adapters.
+	  10/100 Ethernet adapters.
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called r8152.
@@ -120,7 +114,7 @@ config USB_RTL8152
 config USB_USBNET
 	tristate "Multi-purpose USB Networking Framework"
 	depends on m
-	select BPAUTO_MII
+	select BACKPORT_MII
 	---help---
 	  This driver supports several kinds of network links over USB,
 	  with "minidrivers" built around a common network driver core
@@ -203,6 +197,7 @@ config USB_NET_AX88179_178A
 	  what other networking devices you have in use.
 
 config USB_NET_CDCETHER
+	depends on n
 	tristate "CDC Ethernet support (smart devices such as cable modems)"
 	depends on m
 	depends on USB_USBNET
@@ -322,23 +317,6 @@ config USB_NET_SR9700
 	help
 	  This option adds support for CoreChip-sz SR9700 based USB 1.1
 	  10/100 Ethernet adapters.
-
-config USB_NET_SR9800
-	depends on n
-	tristate "CoreChip-sz SR9800 based USB 2.0 10/100 ethernet devices"
-	depends on m
-	depends on USB_USBNET
-	depends on CRC32
-	---help---
-	  Say Y if you want to use one of the following 100Mbps USB Ethernet
-	  device based on the CoreChip-sz SR9800 chip.
-
-	  This driver makes the adapter appear as a normal Ethernet interface,
-	  typically on eth0, if it is the only ethernet device, or perhaps on
-	  eth1, if you have a PCI or ISA ethernet card installed.
-
-	  To compile this driver as a module, choose M here: the
-	  module will be called sr9800.
 
 config USB_NET_SMSC75XX
 	depends on n
@@ -634,4 +612,5 @@ config USB_VL600
 
 	  http://ubuntuforums.org/showpost.php?p=10589647&postcount=17
 
-endif # USB_NET_DRIVERS
+
+endmenu

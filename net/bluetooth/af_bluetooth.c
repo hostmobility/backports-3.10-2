@@ -31,7 +31,7 @@
 #include <net/bluetooth/bluetooth.h>
 #include <linux/proc_fs.h>
 
-#define VERSION "2.20"
+#define VERSION "2.17"
 
 /* Bluetooth sockets */
 #define BT_MAX_PROTO	8
@@ -104,8 +104,12 @@ void bt_sock_unregister(int proto)
 }
 EXPORT_SYMBOL(bt_sock_unregister);
 
+#if defined(CPTCFG_BACKPORT_OPTION_BT_SOCK_CREATE_NEEDS_KERN)
 static int bt_sock_create(struct net *net, struct socket *sock, int proto,
 			  int kern)
+#else
+static int bt_sock_create(struct net *net, struct socket *sock, int proto)
+#endif
 {
 	int err;
 
@@ -123,7 +127,11 @@ static int bt_sock_create(struct net *net, struct socket *sock, int proto,
 	read_lock(&bt_proto_lock);
 
 	if (bt_proto[proto] && try_module_get(bt_proto[proto]->owner)) {
+#if defined(CPTCFG_BACKPORT_OPTION_BT_SOCK_CREATE_NEEDS_KERN)
 		err = bt_proto[proto]->create(net, sock, proto, kern);
+#else
+		err = bt_proto[proto]->create(net, sock, proto);
+#endif
 		if (!err)
 			bt_sock_reclassify_lock(sock->sk, proto);
 		module_put(bt_proto[proto]->owner);
@@ -237,7 +245,7 @@ int bt_sock_recvmsg(struct kiocb *iocb, struct socket *sock,
 	}
 
 	skb_reset_transport_header(skb);
-	err = skb_copy_datagram_msg(skb, 0, msg, copied);
+	err = skb_copy_datagram_iovec(skb, 0, msg->msg_iov, copied);
 	if (err == 0) {
 		sock_recv_ts_and_drops(msg, sk, skb);
 
@@ -328,7 +336,7 @@ int bt_sock_stream_recvmsg(struct kiocb *iocb, struct socket *sock,
 		}
 
 		chunk = min_t(unsigned int, skb->len, size);
-		if (skb_copy_datagram_msg(skb, 0, msg, chunk)) {
+		if (skb_copy_datagram_iovec(skb, 0, msg->msg_iov, chunk)) {
 			skb_queue_head(&sk->sk_receive_queue, skb);
 			if (!copied)
 				copied = -EFAULT;
@@ -459,7 +467,11 @@ int bt_sock_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		if (sk->sk_state == BT_LISTEN)
 			return -EINVAL;
 
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,31))
 		amount = sk->sk_sndbuf - sk_wmem_alloc_get(sk);
+#else
+		amount = sk->sk_sndbuf - atomic_read(&sk->sk_wmem_alloc);
+#endif
 		if (amount < 0)
 			amount = 0;
 		err = put_user(amount, (int __user *) arg);
@@ -639,7 +651,7 @@ static int bt_seq_show(struct seq_file *seq, void *v)
 	return 0;
 }
 
-static const struct seq_operations bt_seq_ops = {
+static struct seq_operations bt_seq_ops = {
 	.start = bt_seq_start,
 	.next  = bt_seq_next,
 	.stop  = bt_seq_stop,
@@ -709,10 +721,7 @@ EXPORT_SYMBOL_GPL(bt_debugfs);
 
 static int __init bt_init(void)
 {
-	struct sk_buff *skb;
 	int err;
-
-	BUILD_BUG_ON(sizeof(struct bt_skb_cb) > sizeof(skb->cb));
 
 	BT_INFO("Core ver %s", VERSION);
 

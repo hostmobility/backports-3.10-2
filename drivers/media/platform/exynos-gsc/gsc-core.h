@@ -117,7 +117,7 @@ enum gsc_yuv_fmt {
  * @flags: flags indicating which operation mode format applies to
  */
 struct gsc_fmt {
-	u32 mbus_code;
+	enum v4l2_mbus_pixelcode mbus_code;
 	char	*name;
 	u32	pixelformat;
 	u32	color;

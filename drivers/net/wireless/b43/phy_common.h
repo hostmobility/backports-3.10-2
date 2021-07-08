@@ -3,6 +3,9 @@
 
 #include <linux/types.h>
 #include <linux/nl80211.h>
+#if (LINUX_VERSION_CODE == KERNEL_VERSION(2,6,28))
+#include <asm/atomic.h>
+#endif
 
 struct b43_wldev;
 
@@ -228,11 +231,11 @@ struct b43_phy {
 	bool supports_2ghz;
 	bool supports_5ghz;
 
-	/* Is GMODE (2 GHz mode) bit enabled? */
-	bool gmode;
+	/* HT info */
+	bool is_40mhz;
 
-	/* After power reset full init has to be performed */
-	bool do_full_init;
+	/* GMODE bit enabled? */
+	bool gmode;
 
 	/* Analog Type */
 	u8 analog;
@@ -264,8 +267,9 @@ struct b43_phy {
 	unsigned long next_txpwr_check_time;
 
 	/* Current channel */
-	struct cfg80211_chan_def *chandef;
 	unsigned int channel;
+	u16 channel_freq;
+	enum nl80211_channel_type channel_type;
 
 	/* PHY TX errors counter. */
 	atomic_t txerr_cnt;
@@ -389,13 +393,14 @@ void b43_phy_lock(struct b43_wldev *dev);
  */
 void b43_phy_unlock(struct b43_wldev *dev);
 
-void b43_phy_put_into_reset(struct b43_wldev *dev);
-void b43_phy_take_out_of_reset(struct b43_wldev *dev);
-
 /**
  * b43_switch_channel - Switch to another channel
  */
 int b43_switch_channel(struct b43_wldev *dev, unsigned int new_channel);
+/**
+ * B43_DEFAULT_CHANNEL - Switch to the default channel.
+ */
+#define B43_DEFAULT_CHANNEL	UINT_MAX
 
 /**
  * b43_software_rfkill - Turn the radio ON or OFF in software.
@@ -446,7 +451,7 @@ int b43_phy_shm_tssi_read(struct b43_wldev *dev, u16 shm_offset);
  */
 void b43_phyop_switch_analog_generic(struct b43_wldev *dev, bool on);
 
-bool b43_is_40mhz(struct b43_wldev *dev);
+bool b43_channel_type_is_40mhz(enum nl80211_channel_type channel_type);
 
 void b43_phy_force_clock(struct b43_wldev *dev, bool force);
 

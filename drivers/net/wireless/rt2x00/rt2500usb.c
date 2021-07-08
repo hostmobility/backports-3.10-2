@@ -13,7 +13,9 @@
 	GNU General Public License for more details.
 
 	You should have received a copy of the GNU General Public License
-	along with this program; if not, see <http://www.gnu.org/licenses/>.
+	along with this program; if not, write to the
+	Free Software Foundation, Inc.,
+	59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  */
 
 /*
@@ -24,6 +26,7 @@
 
 #include <linux/delay.h>
 #include <linux/etherdevice.h>
+#include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/slab.h>
@@ -47,7 +50,7 @@ MODULE_PARM_DESC(nohwcrypt, "Disable hardware encryption.");
  * BBP and RF register require indirect register access,
  * and use the CSR registers BBPCSR and RFCSR to achieve this.
  * These indirect registers work with busy bits,
- * and we will try maximal REGISTER_USB_BUSY_COUNT times to access
+ * and we will try maximal REGISTER_BUSY_COUNT times to access
  * the register while taking a REGISTER_BUSY_DELAY us delay
  * between each attampt. When the busy bit is still set at that time,
  * the access attempt is considered to have failed,
@@ -62,7 +65,7 @@ static inline void rt2500usb_register_read(struct rt2x00_dev *rt2x00dev,
 	__le16 reg;
 	rt2x00usb_vendor_request_buff(rt2x00dev, USB_MULTI_READ,
 				      USB_VENDOR_REQUEST_IN, offset,
-				      &reg, sizeof(reg));
+				      &reg, sizeof(reg), REGISTER_TIMEOUT);
 	*value = le16_to_cpu(reg);
 }
 
@@ -83,7 +86,8 @@ static inline void rt2500usb_register_multiread(struct rt2x00_dev *rt2x00dev,
 {
 	rt2x00usb_vendor_request_buff(rt2x00dev, USB_MULTI_READ,
 				      USB_VENDOR_REQUEST_IN, offset,
-				      value, length);
+				      value, length,
+				      REGISTER_TIMEOUT16(length));
 }
 
 static inline void rt2500usb_register_write(struct rt2x00_dev *rt2x00dev,
@@ -93,7 +97,7 @@ static inline void rt2500usb_register_write(struct rt2x00_dev *rt2x00dev,
 	__le16 reg = cpu_to_le16(value);
 	rt2x00usb_vendor_request_buff(rt2x00dev, USB_MULTI_WRITE,
 				      USB_VENDOR_REQUEST_OUT, offset,
-				      &reg, sizeof(reg));
+				      &reg, sizeof(reg), REGISTER_TIMEOUT);
 }
 
 static inline void rt2500usb_register_write_lock(struct rt2x00_dev *rt2x00dev,
@@ -112,7 +116,8 @@ static inline void rt2500usb_register_multiwrite(struct rt2x00_dev *rt2x00dev,
 {
 	rt2x00usb_vendor_request_buff(rt2x00dev, USB_MULTI_WRITE,
 				      USB_VENDOR_REQUEST_OUT, offset,
-				      value, length);
+				      value, length,
+				      REGISTER_TIMEOUT16(length));
 }
 
 static int rt2500usb_regbusy_read(struct rt2x00_dev *rt2x00dev,
@@ -122,7 +127,7 @@ static int rt2500usb_regbusy_read(struct rt2x00_dev *rt2x00dev,
 {
 	unsigned int i;
 
-	for (i = 0; i < REGISTER_USB_BUSY_COUNT; i++) {
+	for (i = 0; i < REGISTER_BUSY_COUNT; i++) {
 		rt2500usb_register_read_lock(rt2x00dev, offset, reg);
 		if (!rt2x00_get_field16(*reg, field))
 			return 1;
@@ -904,7 +909,7 @@ static int rt2500usb_wait_bbp_ready(struct rt2x00_dev *rt2x00dev)
 	unsigned int i;
 	u8 value;
 
-	for (i = 0; i < REGISTER_USB_BUSY_COUNT; i++) {
+	for (i = 0; i < REGISTER_BUSY_COUNT; i++) {
 		rt2500usb_bbp_read(rt2x00dev, 0, &value);
 		if ((value != 0xff) && (value != 0x00))
 			return 0;
@@ -1023,7 +1028,7 @@ static int rt2500usb_set_state(struct rt2x00_dev *rt2x00dev,
 	 * We must wait until the register indicates that the
 	 * device has entered the correct state.
 	 */
-	for (i = 0; i < REGISTER_USB_BUSY_COUNT; i++) {
+	for (i = 0; i < REGISTER_BUSY_COUNT; i++) {
 		rt2500usb_register_read(rt2x00dev, MAC_CSR17, &reg2);
 		bbp_state = rt2x00_get_field16(reg2, MAC_CSR17_BBP_CURR_STATE);
 		rf_state = rt2x00_get_field16(reg2, MAC_CSR17_RF_CURR_STATE);
@@ -1703,11 +1708,6 @@ static int rt2500usb_probe_hw_mode(struct rt2x00_dev *rt2x00dev)
 	    IEEE80211_HW_SIGNAL_DBM |
 	    IEEE80211_HW_SUPPORTS_PS |
 	    IEEE80211_HW_PS_NULLFUNC_STACK;
-
-	/*
-	 * Disable powersaving as default.
-	 */
-	rt2x00dev->hw->wiphy->flags &= ~WIPHY_FLAG_PS_ON_BY_DEFAULT;
 
 	SET_IEEE80211_DEV(rt2x00dev->hw, rt2x00dev->dev);
 	SET_IEEE80211_PERM_ADDR(rt2x00dev->hw,

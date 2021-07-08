@@ -639,6 +639,7 @@ int atl1c_phy_init(struct atl1c_hw *hw)
 			dev_err(&pdev->dev, "Wrong Media type %d\n",
 				hw->media_type);
 		return -1;
+		break;
 	}
 
 	ret_val = atl1c_write_phy_reg(hw, MII_BMCR, mii_bmcr_data);
@@ -681,6 +682,7 @@ int atl1c_get_speed_and_duplex(struct atl1c_hw *hw, u16 *speed, u16 *duplex)
 		break;
 	default:
 		return -1;
+		break;
 	}
 
 	if (phy_data & GIGA_PSSR_DPLX)

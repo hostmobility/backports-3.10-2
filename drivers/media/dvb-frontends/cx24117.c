@@ -135,33 +135,15 @@
 
 
 enum cmds {
-	CMD_SET_VCOFREQ    = 0x10,
-	CMD_TUNEREQUEST    = 0x11,
-	CMD_GLOBAL_MPEGCFG = 0x13,
-	CMD_MPEGCFG        = 0x14,
-	CMD_TUNERINIT      = 0x15,
-	CMD_GET_SRATE      = 0x18,
-	CMD_SET_GOLDCODE   = 0x19,
-	CMD_GET_AGCACC     = 0x1a,
-	CMD_DEMODINIT      = 0x1b,
-	CMD_GETCTLACC      = 0x1c,
-
-	CMD_LNBCONFIG      = 0x20,
-	CMD_LNBSEND        = 0x21,
-	CMD_LNBDCLEVEL     = 0x22,
-	CMD_LNBPCBCONFIG   = 0x23,
-	CMD_LNBSENDTONEBST = 0x24,
-	CMD_LNBUPDREPLY    = 0x25,
-
-	CMD_SET_GPIOMODE   = 0x30,
-	CMD_SET_GPIOEN     = 0x31,
-	CMD_SET_GPIODIR    = 0x32,
-	CMD_SET_GPIOOUT    = 0x33,
-	CMD_ENABLERSCORR   = 0x34,
-	CMD_FWVERSION      = 0x35,
-	CMD_SET_SLEEPMODE  = 0x36,
-	CMD_BERCTRL        = 0x3c,
-	CMD_EVENTCTRL      = 0x3d,
+	CMD_SET_VCO     = 0x10,
+	CMD_TUNEREQUEST = 0x11,
+	CMD_MPEGCONFIG  = 0x13,
+	CMD_TUNERINIT   = 0x14,
+	CMD_LNBSEND     = 0x21, /* Formerly CMD_SEND_DISEQC */
+	CMD_LNBDCLEVEL  = 0x22,
+	CMD_SET_TONE    = 0x23,
+	CMD_UPDFWVERS   = 0x35,
+	CMD_TUNERSLEEP  = 0x36,
 };
 
 static LIST_HEAD(hybrid_tuner_instance_list);
@@ -459,7 +441,7 @@ static int cx24117_firmware_ondemand(struct dvb_frontend *fe)
 	if (state->priv->skip_fw_load)
 		return 0;
 
-	/* check if firmware is already running */
+	/* check if firmware if already running */
 	if (cx24117_readreg(state, 0xeb) != 0xa) {
 		/* Load firmware */
 		/* request the firmware, this will block until loaded */
@@ -637,8 +619,8 @@ static int cx24117_load_firmware(struct dvb_frontend *fe,
 	cx24117_writereg(state, 0xf7, 0x0c);
 	cx24117_writereg(state, 0xe0, 0x00);
 
-	/* Init demodulator */
-	cmd.args[0] = CMD_DEMODINIT;
+	/* CMD 1B */
+	cmd.args[0] = 0x1b;
 	cmd.args[1] = 0x00;
 	cmd.args[2] = 0x01;
 	cmd.args[3] = 0x00;
@@ -647,8 +629,8 @@ static int cx24117_load_firmware(struct dvb_frontend *fe,
 	if (ret != 0)
 		goto error;
 
-	/* Set VCO frequency */
-	cmd.args[0] = CMD_SET_VCOFREQ;
+	/* CMD 10 */
+	cmd.args[0] = CMD_SET_VCO;
 	cmd.args[1] = 0x06;
 	cmd.args[2] = 0x2b;
 	cmd.args[3] = 0xd8;
@@ -666,8 +648,8 @@ static int cx24117_load_firmware(struct dvb_frontend *fe,
 	if (ret != 0)
 		goto error;
 
-	/* Tuner init */
-	cmd.args[0] = CMD_TUNERINIT;
+	/* CMD 15 */
+	cmd.args[0] = 0x15;
 	cmd.args[1] = 0x00;
 	cmd.args[2] = 0x01;
 	cmd.args[3] = 0x00;
@@ -685,8 +667,8 @@ static int cx24117_load_firmware(struct dvb_frontend *fe,
 	if (ret != 0)
 		goto error;
 
-	/* Global MPEG config */
-	cmd.args[0] = CMD_GLOBAL_MPEGCFG;
+	/* CMD 13 */
+	cmd.args[0] = CMD_MPEGCONFIG;
 	cmd.args[1] = 0x00;
 	cmd.args[2] = 0x00;
 	cmd.args[3] = 0x00;
@@ -697,9 +679,9 @@ static int cx24117_load_firmware(struct dvb_frontend *fe,
 	if (ret != 0)
 		goto error;
 
-	/* MPEG config for each demod */
+	/* CMD 14 */
 	for (i = 0; i < 2; i++) {
-		cmd.args[0] = CMD_MPEGCFG;
+		cmd.args[0] = CMD_TUNERINIT;
 		cmd.args[1] = (u8) i;
 		cmd.args[2] = 0x00;
 		cmd.args[3] = 0x05;
@@ -717,8 +699,8 @@ static int cx24117_load_firmware(struct dvb_frontend *fe,
 	cx24117_writereg(state, 0xcf, 0x00);
 	cx24117_writereg(state, 0xe5, 0x04);
 
-	/* Get firmware version */
-	cmd.args[0] = CMD_FWVERSION;
+	/* Firmware CMD 35: Get firmware version */
+	cmd.args[0] = CMD_UPDFWVERS;
 	cmd.len = 2;
 	for (i = 0; i < 4; i++) {
 		cmd.args[1] = i;
@@ -797,8 +779,8 @@ static int cx24117_read_signal_strength(struct dvb_frontend *fe,
 	u8 reg = (state->demod == 0) ?
 		CX24117_REG_SSTATUS0 : CX24117_REG_SSTATUS1;
 
-	/* Read AGC accumulator register */
-	cmd.args[0] = CMD_GET_AGCACC;
+	/* Firmware CMD 1A */
+	cmd.args[0] = 0x1a;
 	cmd.args[1] = (u8) state->demod;
 	cmd.len = 2;
 	ret = cx24117_cmd_execute(fe, &cmd);
@@ -917,15 +899,22 @@ static int cx24117_set_voltage(struct dvb_frontend *fe,
 		voltage == SEC_VOLTAGE_18 ? "SEC_VOLTAGE_18" :
 		"SEC_VOLTAGE_OFF");
 
-	/* Prepare a set GPIO logic level CMD */
-	cmd.args[0] = CMD_SET_GPIOOUT;
-	cmd.args[2] = reg; /* mask */
+	/* CMD 32 */
+	cmd.args[0] = 0x32;
+	cmd.args[1] = reg;
+	cmd.args[2] = reg;
 	cmd.len = 3;
+	ret = cx24117_cmd_execute(fe, &cmd);
+	if (ret)
+		return ret;
 
 	if ((voltage == SEC_VOLTAGE_13) ||
 	    (voltage == SEC_VOLTAGE_18)) {
-		/* power on LNB */
+		/* CMD 33 */
+		cmd.args[0] = 0x33;
 		cmd.args[1] = reg;
+		cmd.args[2] = reg;
+		cmd.len = 3;
 		ret = cx24117_cmd_execute(fe, &cmd);
 		if (ret != 0)
 			return ret;
@@ -937,22 +926,22 @@ static int cx24117_set_voltage(struct dvb_frontend *fe,
 		/* Wait for voltage/min repeat delay */
 		msleep(100);
 
-		/* Set 13V/18V select pin */
+		/* CMD 22 - CMD_LNBDCLEVEL */
 		cmd.args[0] = CMD_LNBDCLEVEL;
 		cmd.args[1] = state->demod ? 0 : 1;
 		cmd.args[2] = (voltage == SEC_VOLTAGE_18 ? 0x01 : 0x00);
 		cmd.len = 3;
-		ret = cx24117_cmd_execute(fe, &cmd);
 
 		/* Min delay time before DiSEqC send */
 		msleep(20);
 	} else {
-		/* power off LNB */
+		cmd.args[0] = 0x33;
 		cmd.args[1] = 0x00;
-		ret = cx24117_cmd_execute(fe, &cmd);
+		cmd.args[2] = reg;
+		cmd.len = 3;
 	}
 
-	return ret;
+	return cx24117_cmd_execute(fe, &cmd);
 }
 
 static int cx24117_set_tone(struct dvb_frontend *fe,
@@ -979,7 +968,8 @@ static int cx24117_set_tone(struct dvb_frontend *fe,
 	msleep(20);
 
 	/* Set the tone */
-	cmd.args[0] = CMD_LNBPCBCONFIG;
+	/* CMD 23 - CMD_SET_TONE */
+	cmd.args[0] = CMD_SET_TONE;
 	cmd.args[1] = (state->demod ? 0 : 1);
 	cmd.args[2] = 0x00;
 	cmd.args[3] = 0x00;
@@ -1176,7 +1166,7 @@ struct dvb_frontend *cx24117_attach(const struct cx24117_config *config,
 
 	switch (demod) {
 	case 0:
-		dev_err(&i2c->dev,
+		dev_err(&state->priv->i2c->dev,
 			"%s: Error attaching frontend %d\n",
 			KBUILD_MODNAME, demod);
 		goto error1;
@@ -1200,6 +1190,12 @@ struct dvb_frontend *cx24117_attach(const struct cx24117_config *config,
 	state->demod = demod - 1;
 	state->priv = priv;
 
+	/* test i2c bus for ack */
+	if (demod == 0) {
+		if (cx24117_readreg(state, 0x00) < 0)
+			goto error3;
+	}
+
 	dev_info(&state->priv->i2c->dev,
 		"%s: Attaching frontend %d\n",
 		KBUILD_MODNAME, state->demod);
@@ -1210,6 +1206,8 @@ struct dvb_frontend *cx24117_attach(const struct cx24117_config *config,
 	state->frontend.demodulator_priv = state;
 	return &state->frontend;
 
+error3:
+	kfree(state);
 error2:
 	cx24117_release_priv(priv);
 error1:
@@ -1233,8 +1231,8 @@ static int cx24117_initfe(struct dvb_frontend *fe)
 
 	mutex_lock(&state->priv->fe_lock);
 
-	/* Set sleep mode off */
-	cmd.args[0] = CMD_SET_SLEEPMODE;
+	/* Firmware CMD 36: Power config */
+	cmd.args[0] = CMD_TUNERSLEEP;
 	cmd.args[1] = (state->demod ? 1 : 0);
 	cmd.args[2] = 0;
 	cmd.len = 3;
@@ -1246,8 +1244,8 @@ static int cx24117_initfe(struct dvb_frontend *fe)
 	if (ret != 0)
 		goto exit;
 
-	/* Set BER control */
-	cmd.args[0] = CMD_BERCTRL;
+	/* CMD 3C */
+	cmd.args[0] = 0x3c;
 	cmd.args[1] = (state->demod ? 1 : 0);
 	cmd.args[2] = 0x10;
 	cmd.args[3] = 0x10;
@@ -1256,20 +1254,10 @@ static int cx24117_initfe(struct dvb_frontend *fe)
 	if (ret != 0)
 		goto exit;
 
-	/* Set RS correction (enable/disable) */
-	cmd.args[0] = CMD_ENABLERSCORR;
+	/* CMD 34 */
+	cmd.args[0] = 0x34;
 	cmd.args[1] = (state->demod ? 1 : 0);
 	cmd.args[2] = CX24117_OCC;
-	cmd.len = 3;
-	ret = cx24117_cmd_execute_nolock(fe, &cmd);
-	if (ret != 0)
-		goto exit;
-
-	/* Set GPIO direction */
-	/* Set as output - controls LNB power on/off */
-	cmd.args[0] = CMD_SET_GPIODIR;
-	cmd.args[1] = 0x30;
-	cmd.args[2] = 0x30;
 	cmd.len = 3;
 	ret = cx24117_cmd_execute_nolock(fe, &cmd);
 
@@ -1290,8 +1278,8 @@ static int cx24117_sleep(struct dvb_frontend *fe)
 	dev_dbg(&state->priv->i2c->dev, "%s() demod%d\n",
 		__func__, state->demod);
 
-	/* Set sleep mode on */
-	cmd.args[0] = CMD_SET_SLEEPMODE;
+	/* Firmware CMD 36: Power config */
+	cmd.args[0] = CMD_TUNERSLEEP;
 	cmd.args[1] = (state->demod ? 1 : 0);
 	cmd.args[2] = 1;
 	cmd.len = 3;
@@ -1570,8 +1558,7 @@ static int cx24117_get_frontend(struct dvb_frontend *fe)
 
 	u8 buf[0x1f-4];
 
-	/* Read current tune parameters */
-	cmd.args[0] = CMD_GETCTLACC;
+	cmd.args[0] = 0x1c;
 	cmd.args[1] = (u8) state->demod;
 	cmd.len = 2;
 	ret = cx24117_cmd_execute(fe, &cmd);

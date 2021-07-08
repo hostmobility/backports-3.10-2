@@ -21,6 +21,7 @@
  *
  */
 
+#include <linux/export.h>
 #include "wlcore.h"
 #include "debug.h"
 #include "io.h"
@@ -67,7 +68,7 @@ static void wl1271_stop_ba_event(struct wl1271 *wl, struct wl12xx_vif *wlvif)
 		u8 hlid;
 		struct wl1271_link *lnk;
 		for_each_set_bit(hlid, wlvif->ap.sta_hlid_map,
-				 wl->num_links) {
+				 WL12XX_MAX_LINKS) {
 			lnk = &wl->links[hlid];
 			if (!lnk->ba_bitmap)
 				continue;
@@ -158,11 +159,6 @@ EXPORT_SYMBOL_GPL(wlcore_event_channel_switch);
 
 void wlcore_event_dummy_packet(struct wl1271 *wl)
 {
-	if (wl->plt) {
-		wl1271_info("Got DUMMY_PACKET event in PLT mode.  FW bug, ignoring.");
-		return;
-	}
-
 	wl1271_debug(DEBUG_EVENT, "DUMMY_PACKET_ID_EVENT_ID");
 	wl1271_tx_dummy_packet(wl);
 }
@@ -177,7 +173,7 @@ static void wlcore_disconnect_sta(struct wl1271 *wl, unsigned long sta_bitmap)
 	const u8 *addr;
 	int h;
 
-	for_each_set_bit(h, &sta_bitmap, wl->num_links) {
+	for_each_set_bit(h, &sta_bitmap, WL12XX_MAX_LINKS) {
 		bool found = false;
 		/* find the ap vif connected to this sta */
 		wl12xx_for_each_wlvif_ap(wl, wlvif) {
@@ -259,7 +255,10 @@ void wlcore_event_beacon_loss(struct wl1271 *wl, unsigned long roles_bitmap)
 					     &wlvif->connection_loss_work,
 					     msecs_to_jiffies(delay));
 
-		ieee80211_cqm_beacon_loss_notify(vif, GFP_KERNEL);
+		ieee80211_cqm_rssi_notify(
+				vif,
+				NL80211_CQM_RSSI_BEACON_LOSS_EVENT,
+				GFP_KERNEL);
 	}
 }
 EXPORT_SYMBOL_GPL(wlcore_event_beacon_loss);

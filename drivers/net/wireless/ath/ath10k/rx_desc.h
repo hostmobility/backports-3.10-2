@@ -839,6 +839,7 @@ struct rx_ppdu_start {
  *		Reserved: HW should fill with 0, FW should ignore.
 */
 
+
 #define RX_PPDU_END_FLAGS_PHY_ERR             (1 << 0)
 #define RX_PPDU_END_FLAGS_RX_LOCATION         (1 << 1)
 #define RX_PPDU_END_FLAGS_TXBF_H_INFO         (1 << 2)

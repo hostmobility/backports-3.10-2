@@ -2272,14 +2272,18 @@ int orinoco_if_add(struct orinoco_private *priv,
 #endif
 	/* Default to standard ops if not set */
 	if (ops)
-		dev->netdev_ops = ops;
+		netdev_attach_ops(dev, ops);
 	else
-		dev->netdev_ops = &orinoco_netdev_ops;
+		netdev_attach_ops(dev, &orinoco_netdev_ops);
 
 	/* we use the default eth_mac_addr for setting the MAC addr */
 
 	/* Reserve space in skb for the SNAP header */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26))
 	dev->needed_headroom = ENCAPS_OVERHEAD;
+#else
+	dev->hard_header_len += ENCAPS_OVERHEAD;
+#endif
 
 	netif_carrier_off(dev);
 

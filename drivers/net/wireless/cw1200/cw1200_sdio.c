@@ -108,9 +108,9 @@ static irqreturn_t cw1200_gpio_irq(int irq, void *dev_id)
 	struct hwbus_priv *self = dev_id;
 
 	if (self->core) {
-		cw1200_sdio_lock(self);
+		sdio_claim_host(self->func);
 		cw1200_irq_handler(self->core);
-		cw1200_sdio_unlock(self);
+		sdio_release_host(self->func);
 		return IRQ_HANDLED;
 	} else {
 		return IRQ_NONE;

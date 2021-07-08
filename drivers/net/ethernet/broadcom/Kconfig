@@ -23,8 +23,7 @@ config B44
 	depends on m
 	depends on SSB_POSSIBLE && HAS_DMA
 	select SSB
-	select BPAUTO_MII
-	depends on PHYLIB
+	select BACKPORT_MII
 	---help---
 	  If you have a network (Ethernet) controller of this type, say Y
 	  or M and read the Ethernet-HOWTO, available from
@@ -57,46 +56,34 @@ config BCM63XX_ENET
 	tristate "Broadcom 63xx internal mac support"
 	depends on m
 	depends on BCM63XX
-	select BPAUTO_MII
+	select BACKPORT_MII
 	depends on PHYLIB
 	help
 	  This driver supports the ethernet MACs in the Broadcom 63xx
 	  MIPS chipset family (BCM63XX).
 
-config BCMGENET
-	depends on n
-	tristate "Broadcom GENET internal MAC support"
-	depends on m
-	select BPAUTO_MII
-	depends on PHYLIB
-	depends on FIXED_PHY
-	depends on BCM7XXX_PHY
-	help
-	  This driver supports the built-in Ethernet MACs found in the
-	  Broadcom BCM7xxx Set Top Box family chipset.
-
 config BNX2
 	depends on n
-	tristate "QLogic NetXtremeII support"
+	tristate "Broadcom NetXtremeII support"
 	depends on m
 	depends on PCI
 	depends on CRC32
-	depends on FW_LOADER
+	select BACKPORT_FW_LOADER
 	---help---
-	  This driver supports QLogic NetXtremeII gigabit Ethernet cards.
+	  This driver supports Broadcom NetXtremeII gigabit Ethernet cards.
 
 	  To compile this driver as a module, choose M here: the module
 	  will be called bnx2.  This is recommended.
 
 config CNIC
 	depends on n
-	tristate "QLogic CNIC support"
+	tristate "Broadcom CNIC support"
 	depends on m
-	depends on PCI && (IPV6 || IPV6=n)
+	depends on PCI
 	select BNX2
 	depends on UIO
 	---help---
-	  This driver supports offload features of QLogic NetXtremeII
+	  This driver supports offload features of Broadcom NetXtremeII
 	  gigabit Ethernet cards.
 
 	  To compile this driver as a module, choose M here: the module
@@ -136,8 +123,7 @@ config BNX2X
 	tristate "Broadcom NetXtremeII 10Gb support"
 	depends on m
 	depends on PCI
-	depends on PTP_1588_CLOCK
-	depends on FW_LOADER
+	select BACKPORT_FW_LOADER
 	depends on ZLIB_INFLATE
 	depends on LIBCRC32C
 	select MDIO
@@ -166,18 +152,5 @@ config BGMAC
 	  They can be found on BCM47xx SoCs and provide gigabit ethernet.
 	  In case of using this driver on BCM4706 it's also requires to enable
 	  BCMA_DRIVER_GMAC_CMN to make it work.
-
-config SYSTEMPORT
-	depends on n
-	tristate "Broadcom SYSTEMPORT internal MAC support"
-	depends on m
-	depends on OF
-	select BPAUTO_MII
-	depends on PHYLIB
-	depends on FIXED_PHY
-	help
-	  This driver supports the built-in Ethernet MACs found in the
-	  Broadcom BCM7xxx Set Top Box family chipset using an internal
-	  Ethernet switch.
 
 endif # NET_VENDOR_BROADCOM

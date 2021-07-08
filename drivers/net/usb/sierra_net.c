@@ -21,7 +21,8 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #define DRIVER_VERSION "v.2.0"
@@ -694,7 +695,7 @@ static int sierra_net_bind(struct usbnet *dev, struct usb_interface *intf)
 
 	priv->usbnet = dev;
 	priv->ifnum = ifacenum;
-	dev->net->netdev_ops = &sierra_net_device_ops;
+	netdev_attach_ops(dev->net, &sierra_net_device_ops);
 
 	/* change MAC addr to include, ifacenum, and to be unique */
 	dev->net->dev_addr[ETH_ALEN-2] = atomic_inc_return(&iface_counter);

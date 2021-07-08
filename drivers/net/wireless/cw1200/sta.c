@@ -13,7 +13,6 @@
 #include <linux/sched.h>
 #include <linux/firmware.h>
 #include <linux/module.h>
-#include <linux/etherdevice.h>
 
 #include "cw1200.h"
 #include "sta.h"
@@ -531,8 +530,13 @@ void cw1200_set_beacon_wakeup_period_work(struct work_struct *work)
 				     priv->join_dtim_period, 0);
 }
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35))
 u64 cw1200_prepare_multicast(struct ieee80211_hw *hw,
 			     struct netdev_hw_addr_list *mc_list)
+#else
+u64 cw1200_prepare_multicast(struct ieee80211_hw *hw, int mc_count,
+			     struct dev_addr_list *ha)
+#endif
 {
 	static u8 broadcast_ipv6[ETH_ALEN] = {
 		0x33, 0x33, 0x00, 0x00, 0x00, 0x01
@@ -541,13 +545,16 @@ u64 cw1200_prepare_multicast(struct ieee80211_hw *hw,
 		0x01, 0x00, 0x5e, 0x00, 0x00, 0x01
 	};
 	struct cw1200_common *priv = hw->priv;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35))
 	struct netdev_hw_addr *ha;
+#endif
 	int count = 0;
 
 	/* Disable multicast filtering */
 	priv->has_multicast_subscription = false;
 	memset(&priv->multicast_filter, 0x00, sizeof(priv->multicast_filter));
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35))
 	if (netdev_hw_addr_list_count(mc_list) > WSM_MAX_GRP_ADDRTABLE_ENTRIES)
 		return 0;
 
@@ -556,18 +563,31 @@ u64 cw1200_prepare_multicast(struct ieee80211_hw *hw,
 		pr_debug("[STA] multicast: %pM\n", ha->addr);
 		memcpy(&priv->multicast_filter.macaddrs[count],
 		       ha->addr, ETH_ALEN);
-		if (!ether_addr_equal(ha->addr, broadcast_ipv4) &&
-		    !ether_addr_equal(ha->addr, broadcast_ipv6))
+		if (memcmp(ha->addr, broadcast_ipv4, ETH_ALEN) &&
+		    memcmp(ha->addr, broadcast_ipv6, ETH_ALEN))
 			priv->has_multicast_subscription = true;
 		count++;
 	}
+#else
+	while (ha &&
+	       count < mc_count &&
+	       count < WSM_MAX_GRP_ADDRTABLE_ENTRIES) {
+		memcpy(&priv->multicast_filter.macaddrs[count],
+		       ha->dmi_addr, ETH_ALEN);
+		if (memcmp(ha->dmi_addr, broadcast_ipv4, ETH_ALEN) &&
+		    memcmp(ha->dmi_addr, broadcast_ipv6, ETH_ALEN))
+			priv->has_multicast_subscription = true;
+		count++;
+		ha = ha->next;
+	}
+#endif
 
 	if (count) {
 		priv->multicast_filter.enable = __cpu_to_le32(1);
 		priv->multicast_filter.num_addrs = __cpu_to_le32(count);
 	}
 
-	return netdev_hw_addr_list_count(mc_list);
+	return count;
 }
 
 void cw1200_configure_filter(struct ieee80211_hw *dev,
@@ -936,8 +956,7 @@ static int __cw1200_flush(struct cw1200_common *priv, bool drop)
 	return ret;
 }
 
-void cw1200_flush(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
-		  u32 queues, bool drop)
+void cw1200_flush(struct ieee80211_hw *hw, u32 queues, bool drop)
 {
 	struct cw1200_common *priv = hw->priv;
 
@@ -2289,6 +2308,7 @@ static int cw1200_upload_null(struct cw1200_common *priv)
 
 static int cw1200_upload_qosnull(struct cw1200_common *priv)
 {
+	int ret = 0;
 	/* TODO:  This needs to be implemented
 
 	struct wsm_template_frame frame = {
@@ -2305,7 +2325,7 @@ static int cw1200_upload_qosnull(struct cw1200_common *priv)
 	dev_kfree_skb(frame.skb);
 
 	*/
-	return 0;
+	return ret;
 }
 
 static int cw1200_enable_beaconing(struct cw1200_common *priv,

@@ -10,8 +10,6 @@
  *   From: Eric Dumazet <edumazet@google.com>
  *   Date: Thu, 10 May 2012 07:51:25 +0000
  *   Subject: [PATCH] codel: Controlled Delay AQM
- *
- *   Added via v3.5
  */
 #ifndef TCA_CODEL_MAX
 /* CODEL */

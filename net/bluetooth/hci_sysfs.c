@@ -49,7 +49,18 @@ static struct attribute *bt_link_attrs[] = {
 	NULL
 };
 
-ATTRIBUTE_GROUPS(bt_link);
+static struct attribute_group bt_link_group = {
+	.attrs = bt_link_attrs,
+};
+
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,31))
+static const struct attribute_group *bt_link_groups[] = {
+#else
+static struct attribute_group *bt_link_groups[] = {
+#endif
+	&bt_link_group,
+	NULL
+};
 
 static void bt_link_release(struct device *dev)
 {
@@ -175,7 +186,18 @@ static struct attribute *bt_host_attrs[] = {
 	NULL
 };
 
-ATTRIBUTE_GROUPS(bt_host);
+static struct attribute_group bt_host_group = {
+	.attrs = bt_host_attrs,
+};
+
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,31))
+static const struct attribute_group *bt_host_groups[] = {
+#else
+static struct attribute_group *bt_host_groups[] = {
+#endif
+	&bt_host_group,
+	NULL
+};
 
 static void bt_host_release(struct device *dev)
 {

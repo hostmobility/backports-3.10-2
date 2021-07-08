@@ -43,12 +43,12 @@ struct bcma_drv_mips {
 extern void bcma_core_mips_init(struct bcma_drv_mips *mcore);
 extern void bcma_core_mips_early_init(struct bcma_drv_mips *mcore);
 
-extern unsigned int bcma_core_mips_irq(struct bcma_device *dev);
+extern unsigned int bcma_core_irq(struct bcma_device *core);
 #else
 static inline void bcma_core_mips_init(struct bcma_drv_mips *mcore) { }
 static inline void bcma_core_mips_early_init(struct bcma_drv_mips *mcore) { }
 
-static inline unsigned int bcma_core_mips_irq(struct bcma_device *dev)
+static inline unsigned int bcma_core_irq(struct bcma_device *core)
 {
 	return 0;
 }

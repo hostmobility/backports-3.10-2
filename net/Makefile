@@ -5,6 +5,8 @@
 # Rewritten to use lists instead of if-statements.
 #
 
+obj-y	:= nonet.o
+
 obj-$(CONFIG_NET)		:= socket.o core/
 
 tmp-$(CONFIG_COMPAT) 		:= compat.o
@@ -55,7 +57,6 @@ obj-$(CONFIG_CAIF)		+= caif/
 ifneq ($(CONFIG_DCB),)
 obj-y				+= dcb/
 endif
-obj-$(CPTCFG_6LOWPAN)		+= 6lowpan/
 obj-$(CPTCFG_IEEE802154)	+= ieee802154/
 obj-$(CPTCFG_MAC802154)		+= mac802154/
 
@@ -71,6 +72,3 @@ obj-$(CONFIG_OPENVSWITCH)	+= openvswitch/
 obj-$(CONFIG_VSOCKETS)	+= vmw_vsock/
 obj-$(CONFIG_NET_MPLS_GSO)	+= mpls/
 obj-$(CONFIG_HSR)		+= hsr/
-ifneq ($(CONFIG_NET_SWITCHDEV),)
-obj-y				+= switchdev/
-endif

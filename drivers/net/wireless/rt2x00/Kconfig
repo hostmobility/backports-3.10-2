@@ -256,11 +256,11 @@ config RT2X00_LIB_USB
 config RT2X00_LIB
 	tristate
 	depends on m
-	select BPAUTO_AVERAGE
+	select BACKPORT_AVERAGE
 
 config RT2X00_LIB_FIRMWARE
 	boolean
-	depends on FW_LOADER
+	select BACKPORT_FW_LOADER
 
 config RT2X00_LIB_CRYPTO
 	boolean

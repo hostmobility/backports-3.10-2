@@ -16,6 +16,7 @@
  * published by the Free Software Foundation.
  */
 
+#include <linux/init.h>
 #include <linux/usb.h>
 #include <net/mac80211.h>
 

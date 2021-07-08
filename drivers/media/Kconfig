@@ -3,7 +3,8 @@
 #
 
 menuconfig MEDIA_SUPPORT
-	depends on !KERNEL_3_2
+	depends on !BACKPORT_KERNEL_3_2
+	depends on !BACKPORT_KERNEL_3_3
 	tristate "Multimedia support"
 	depends on m
 	depends on HAS_IOMEM
@@ -61,13 +62,6 @@ config MEDIA_RADIO_SUPPORT
 		support radio reception. Disabling this option will
 		disable support for them.
 
-config MEDIA_SDR_SUPPORT
-	bool "Software defined radio support"
-	---help---
-	  Enable software defined radio support.
-
-	  Say Y when you have a software defined radio device.
-
 config MEDIA_RC_SUPPORT
 	bool "Remote Controller support"
 	depends on INPUT
@@ -105,7 +99,7 @@ config VIDEO_DEV
 	tristate
 	depends on m
 	depends on MEDIA_SUPPORT
-	depends on MEDIA_CAMERA_SUPPORT || MEDIA_ANALOG_TV_SUPPORT || MEDIA_RADIO_SUPPORT || MEDIA_SDR_SUPPORT
+	depends on MEDIA_CAMERA_SUPPORT || MEDIA_ANALOG_TV_SUPPORT || MEDIA_RADIO_SUPPORT
 	default y
 
 config VIDEO_V4L2_SUBDEV_API
@@ -165,6 +159,7 @@ source "drivers/media/usb/Kconfig"
 source "drivers/media/pci/Kconfig"
 source "drivers/media/platform/Kconfig"
 source "drivers/media/mmc/Kconfig"
+source "drivers/media/parport/Kconfig"
 source "drivers/media/radio/Kconfig"
 
 comment "Supported FireWire (IEEE 1394) Adapters"
@@ -182,10 +177,7 @@ comment "Media ancillary drivers (tuners, sensors, i2c, frontends)"
 
 config MEDIA_SUBDRV_AUTOSELECT
 	bool "Autoselect ancillary drivers (tuners, sensors, i2c, frontends)"
-	depends on MEDIA_ANALOG_TV_SUPPORT || MEDIA_DIGITAL_TV_SUPPORT || MEDIA_CAMERA_SUPPORT || MEDIA_SDR_SUPPORT
-	depends on HAS_IOMEM
-	depends on I2C
-	depends on I2C_MUX
+	depends on MEDIA_ANALOG_TV_SUPPORT || MEDIA_DIGITAL_TV_SUPPORT || MEDIA_CAMERA_SUPPORT
 	default y
 	help
 	  By default, a media driver auto-selects all possible ancillary

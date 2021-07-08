@@ -13,7 +13,6 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
-#include <linux/reset.h>
 #include <media/rc-core.h>
 #include <linux/pinctrl/consumer.h>
 
@@ -22,14 +21,13 @@ struct st_rc_device {
 	int				irq;
 	int				irq_wake;
 	struct clk			*sys_clock;
-	volatile void __iomem		*base;	/* Register base address */
-	volatile void __iomem		*rx_base;/* RX Register base address */
+	void				*base;	/* Register base address */
+	void				*rx_base;/* RX Register base address */
 	struct rc_dev			*rdev;
 	bool				overclocking;
 	int				sample_mult;
 	int				sample_div;
 	bool				rxuhfmode;
-	struct	reset_control		*rstc;
 };
 
 /* Registers */
@@ -163,10 +161,6 @@ static void st_rc_hardware_init(struct st_rc_device *dev)
 	unsigned int rx_max_symbol_per = MAX_SYMB_TIME;
 	unsigned int rx_sampling_freq_div;
 
-	/* Enable the IP */
-	if (dev->rstc)
-		reset_control_deassert(dev->rstc);
-
 	clk_prepare_enable(dev->sys_clock);
 	baseclock = clk_get_rate(dev->sys_clock);
 
@@ -267,8 +261,8 @@ static int st_rc_probe(struct platform_device *pdev)
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 
 	rc_dev->base = devm_ioremap_resource(dev, res);
-	if (IS_ERR((__force void *)rc_dev->base)) {
-		ret = PTR_ERR((__force void *)rc_dev->base);
+	if (IS_ERR(rc_dev->base)) {
+		ret = PTR_ERR(rc_dev->base);
 		goto err;
 	}
 
@@ -277,17 +271,12 @@ static int st_rc_probe(struct platform_device *pdev)
 	else
 		rc_dev->rx_base = rc_dev->base;
 
-
-	rc_dev->rstc = reset_control_get_optional(dev, NULL);
-	if (IS_ERR(rc_dev->rstc))
-		rc_dev->rstc = NULL;
-
 	rc_dev->dev = dev;
 	platform_set_drvdata(pdev, rc_dev);
 	st_rc_hardware_init(rc_dev);
 
 	rdev->driver_type = RC_DRIVER_IR_RAW;
-	rdev->allowed_protocols = RC_BIT_ALL;
+	rdev->allowed_protos = RC_BIT_ALL;
 	/* rx sampling rate is 10Mhz */
 	rdev->rx_resolution = 100;
 	rdev->timeout = US_TO_NS(MAX_SYMB_TIME);
@@ -349,8 +338,6 @@ static int st_rc_suspend(struct device *dev)
 		writel(0x00, rc_dev->rx_base + IRB_RX_EN);
 		writel(0x00, rc_dev->rx_base + IRB_RX_INT_EN);
 		clk_disable_unprepare(rc_dev->sys_clock);
-		if (rc_dev->rstc)
-			reset_control_assert(rc_dev->rstc);
 	}
 
 	return 0;
@@ -376,9 +363,8 @@ static int st_rc_resume(struct device *dev)
 	return 0;
 }
 
-#endif
-
 static SIMPLE_DEV_PM_OPS(st_rc_pm_ops, st_rc_suspend, st_rc_resume);
+#endif
 
 #ifdef CONFIG_OF
 static struct of_device_id st_rc_match[] = {
@@ -392,8 +378,11 @@ MODULE_DEVICE_TABLE(of, st_rc_match);
 static struct platform_driver st_rc_driver = {
 	.driver = {
 		.name = IR_ST_NAME,
+		.owner	= THIS_MODULE,
 		.of_match_table = of_match_ptr(st_rc_match),
+#ifdef CONFIG_PM
 		.pm     = &st_rc_pm_ops,
+#endif
 	},
 	.probe = st_rc_probe,
 	.remove = st_rc_remove,

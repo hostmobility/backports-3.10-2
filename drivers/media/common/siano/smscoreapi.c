@@ -2129,6 +2129,8 @@ int smscore_gpio_get_level(struct smscore_device_t *coredev, u8 pin_num,
 
 static int __init smscore_module_init(void)
 {
+	int rc = 0;
+
 	INIT_LIST_HEAD(&g_smscore_notifyees);
 	INIT_LIST_HEAD(&g_smscore_devices);
 	kmutex_init(&g_smscore_deviceslock);
@@ -2136,7 +2138,7 @@ static int __init smscore_module_init(void)
 	INIT_LIST_HEAD(&g_smscore_registry);
 	kmutex_init(&g_smscore_registrylock);
 
-	return 0;
+	return rc;
 }
 
 static void __exit smscore_module_exit(void)

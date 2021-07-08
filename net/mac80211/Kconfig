@@ -5,9 +5,9 @@ config MAC80211
 	depends on CRYPTO
 	depends on CRYPTO_ARC4
 	depends on CRYPTO_AES
-	select BPAUTO_CRYPTO_CCM
+	depends on CRYPTO_CCM
 	depends on CRC32
-	select BPAUTO_AVERAGE
+	select BACKPORT_AVERAGE
 	---help---
 	  This option enables the hardware independent IEEE 802.11
 	  networking stack.
@@ -19,6 +19,14 @@ if MAC80211 != n
 
 config MAC80211_HAS_RC
 	bool
+
+config MAC80211_RC_PID
+	bool "PID controller based rate control algorithm" if EXPERT
+	select MAC80211_HAS_RC
+	---help---
+	  This option enables a TX rate control algorithm for
+	  mac80211 that uses a PID controller to select the TX
+	  rate.
 
 config MAC80211_RC_MINSTREL
 	bool "Minstrel" if EXPERT
@@ -34,13 +42,6 @@ config MAC80211_RC_MINSTREL_HT
 	---help---
 	  This option enables the 'minstrel_ht' TX rate control algorithm
 
-config MAC80211_RC_MINSTREL_VHT
-	bool "Minstrel 802.11ac support" if EXPERT
-	depends on MAC80211_RC_MINSTREL_HT
-	default n
-	---help---
-	  This option enables VHT in the 'minstrel_ht' TX rate control algorithm
-
 choice
 	prompt "Default rate control algorithm"
 	depends on MAC80211_HAS_RC
@@ -50,6 +51,14 @@ choice
 	  mac80211 will use. Note that this default can still be
 	  overridden through the ieee80211_default_rc_algo module
 	  parameter if different algorithms are available.
+
+config MAC80211_RC_DEFAULT_PID
+	bool "PID controller based rate control algorithm"
+	depends on MAC80211_RC_PID
+	---help---
+	  Select the PID controller based rate control as the
+	  default rate control algorithm. You should choose
+	  this unless you know what you are doing.
 
 config MAC80211_RC_DEFAULT_MINSTREL
 	bool "Minstrel"
@@ -64,6 +73,7 @@ config MAC80211_RC_DEFAULT
 	string
 	default "minstrel_ht" if MAC80211_RC_DEFAULT_MINSTREL && MAC80211_RC_MINSTREL_HT
 	default "minstrel" if MAC80211_RC_DEFAULT_MINSTREL
+	default "pid" if MAC80211_RC_DEFAULT_PID
 	default ""
 
 endif
@@ -85,7 +95,7 @@ config MAC80211_LEDS
 	bool "Enable LED triggers"
 	depends on MAC80211
 	depends on LEDS_CLASS
-	select BPAUTO_LEDS_TRIGGERS
+	select BACKPORT_LEDS_TRIGGERS
 	---help---
 	  This option enables a few LED triggers for different
 	  packet receive/transmit events.
@@ -174,17 +184,6 @@ config MAC80211_HT_DEBUG
 
 	  It should not be selected on production systems as some
 	  of the messages are remotely triggerable.
-
-	  Do not select this option.
-
-config MAC80211_OCB_DEBUG
-	bool "Verbose OCB debugging"
-	depends on MAC80211_DEBUG_MENU
-	---help---
-	  Selecting this option causes mac80211 to print out
-	  very verbose OCB debugging messages. It should not
-	  be selected on production systems as those messages
-	  are remotely triggerable.
 
 	  Do not select this option.
 

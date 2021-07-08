@@ -150,14 +150,14 @@ static inline struct saa6588 *to_saa6588(struct v4l2_subdev *sd)
 
 /* ---------------------------------------------------------------------- */
 
-static bool block_from_buf(struct saa6588 *s, unsigned char *buf)
+static int block_to_user_buf(struct saa6588 *s, unsigned char __user *user_buf)
 {
 	int i;
 
 	if (s->rd_index == s->wr_index) {
 		if (debug > 2)
 			dprintk(PREFIX "Read: buffer empty.\n");
-		return false;
+		return 0;
 	}
 
 	if (debug > 2) {
@@ -166,7 +166,8 @@ static bool block_from_buf(struct saa6588 *s, unsigned char *buf)
 			dprintk("0x%02x ", s->buffer[i]);
 	}
 
-	memcpy(buf, &s->buffer[s->rd_index], 3);
+	if (copy_to_user(user_buf, &s->buffer[s->rd_index], 3))
+		return -EFAULT;
 
 	s->rd_index += 3;
 	if (s->rd_index >= s->buf_size)
@@ -176,22 +177,22 @@ static bool block_from_buf(struct saa6588 *s, unsigned char *buf)
 	if (debug > 2)
 		dprintk("%d blocks total.\n", s->block_count);
 
-	return true;
+	return 1;
 }
 
 static void read_from_buf(struct saa6588 *s, struct saa6588_command *a)
 {
-	unsigned char __user *buf_ptr = a->buffer;
-	unsigned char buf[3];
 	unsigned long flags;
-	unsigned int rd_blocks;
+
+	unsigned char __user *buf_ptr = a->buffer;
 	unsigned int i;
+	unsigned int rd_blocks;
 
 	a->result = 0;
 	if (!a->buffer)
 		return;
 
-	while (!a->nonblocking && !s->data_available_for_read) {
+	while (!s->data_available_for_read) {
 		int ret = wait_event_interruptible(s->read_queue,
 					     s->data_available_for_read);
 		if (ret == -ERESTARTSYS) {
@@ -200,31 +201,24 @@ static void read_from_buf(struct saa6588 *s, struct saa6588_command *a)
 		}
 	}
 
-	rd_blocks = a->block_count;
 	spin_lock_irqsave(&s->lock, flags);
+	rd_blocks = a->block_count;
 	if (rd_blocks > s->block_count)
 		rd_blocks = s->block_count;
-	spin_unlock_irqrestore(&s->lock, flags);
 
-	if (!rd_blocks)
+	if (!rd_blocks) {
+		spin_unlock_irqrestore(&s->lock, flags);
 		return;
+	}
 
 	for (i = 0; i < rd_blocks; i++) {
-		bool got_block;
-
-		spin_lock_irqsave(&s->lock, flags);
-		got_block = block_from_buf(s, buf);
-		spin_unlock_irqrestore(&s->lock, flags);
-		if (!got_block)
+		if (block_to_user_buf(s, buf_ptr)) {
+			buf_ptr += 3;
+			a->result++;
+		} else
 			break;
-		if (copy_to_user(buf_ptr, buf, 3)) {
-			a->result = -EFAULT;
-			return;
-		}
-		buf_ptr += 3;
-		a->result += 3;
 	}
-	spin_lock_irqsave(&s->lock, flags);
+	a->result *= 3;
 	s->data_available_for_read = (s->block_count > 0);
 	spin_unlock_irqrestore(&s->lock, flags);
 }
@@ -400,11 +394,14 @@ static long saa6588_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
 	struct saa6588_command *a = arg;
 
 	switch (cmd) {
+		/* --- open() for /dev/radio --- */
+	case SAA6588_CMD_OPEN:
+		a->result = 0;	/* return error if chip doesn't work ??? */
+		break;
 		/* --- close() for /dev/radio --- */
 	case SAA6588_CMD_CLOSE:
 		s->data_available_for_read = 1;
 		wake_up_interruptible(&s->read_queue);
-		s->data_available_for_read = 0;
 		a->result = 0;
 		break;
 		/* --- read() for /dev/radio --- */
@@ -414,8 +411,9 @@ static long saa6588_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
 		/* --- poll() for /dev/radio --- */
 	case SAA6588_CMD_POLL:
 		a->result = 0;
-		if (s->data_available_for_read)
+		if (s->data_available_for_read) {
 			a->result |= POLLIN | POLLRDNORM;
+		}
 		poll_wait(a->instance, &s->read_queue, a->event_list);
 		break;
 

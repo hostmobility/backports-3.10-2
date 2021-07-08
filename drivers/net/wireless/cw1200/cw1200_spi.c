@@ -398,7 +398,7 @@ static int cw1200_spi_probe(struct spi_device *func)
 		return -1;
 	}
 
-	self = devm_kzalloc(&func->dev, sizeof(*self), GFP_KERNEL);
+	self = kzalloc(sizeof(*self), GFP_KERNEL);
 	if (!self) {
 		pr_err("Can't allocate SPI hwbus_priv.");
 		return -ENOMEM;
@@ -424,6 +424,7 @@ static int cw1200_spi_probe(struct spi_device *func)
 	if (status) {
 		cw1200_spi_irq_unsubscribe(self);
 		cw1200_spi_off(plat_data);
+		kfree(self);
 	}
 
 	return status;
@@ -440,6 +441,7 @@ static int cw1200_spi_disconnect(struct spi_device *func)
 			cw1200_core_release(self->core);
 			self->core = NULL;
 		}
+		kfree(self);
 	}
 	cw1200_spi_off(dev_get_platdata(&func->dev));
 
