@@ -22,7 +22,7 @@
 #include <linux/pci.h>
 #include <linux/pci_regs.h>
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(3,7,8))
+#if LINUX_VERSION_IS_LESS(3,7,8)
 void netdev_set_default_ethtool_ops(struct net_device *dev,
 				    const struct ethtool_ops *ops)
 {
@@ -275,7 +275,7 @@ static bool hid_match_one_id(struct hid_device *hdev,
 		const struct hid_device_id *id)
 {
 	return (id->bus == HID_BUS_ANY || id->bus == hdev->bus) &&
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,8,0))
+#if LINUX_VERSION_IS_GEQ(3,8,0)
 		(id->group == HID_GROUP_ANY || id->group == hdev->group) &&
 #endif
 		(id->vendor == HID_ANY_ID || id->vendor == hdev->vendor) &&
@@ -333,97 +333,31 @@ bool hid_ignore(struct hid_device *hdev)
 			return true;
 		break;
 	case USB_VENDOR_ID_JESS:
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,28))
 		if (hdev->product == USB_DEVICE_ID_JESS_YUREX &&
 				hdev->type == HID_TYPE_USBNONE)
 			return true;
-#else
-		if (hdev->product == USB_DEVICE_ID_JESS_YUREX)
-			return true;
-#endif
 		break;
 	case USB_VENDOR_ID_DWAV:
 		/* These are handled by usbtouchscreen. hdev->type is probably
 		 * HID_TYPE_USBNONE, but we say !HID_TYPE_USBMOUSE to match
 		 * usbtouchscreen. */
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,28))
 		if ((hdev->product == USB_DEVICE_ID_EGALAX_TOUCHCONTROLLER ||
 		     hdev->product == USB_DEVICE_ID_DWAV_TOUCHCONTROLLER) &&
 		    hdev->type != HID_TYPE_USBMOUSE)
 			return true;
-#else
-		if (hdev->product == USB_DEVICE_ID_EGALAX_TOUCHCONTROLLER ||
-		     hdev->product == USB_DEVICE_ID_DWAV_TOUCHCONTROLLER)
-			return true;
-#endif
 		break;
 	}
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,28))
 	if (hdev->type == HID_TYPE_USBMOUSE &&
 			hid_match_id(hdev, hid_mouse_ignore_list))
 		return true;
-#endif
 
 	return !!hid_match_id(hdev, hid_ignore_list);
 }
 EXPORT_SYMBOL_GPL(hid_ignore);
 
-/**
- * Backport this:
- * commit b4cbb197c7e7a68dbad0d491242e3ca67420c13e
- * Author: Linus Torvalds <torvalds@linux-foundation.org>
- * Date:   Tue Apr 16 13:45:37 2013 -0700
- *
- *     vm: add vm_iomap_memory() helper function
- */
-/**
- * vm_iomap_memory - remap memory to userspace
- * @vma: user vma to map to
- * @start: start of area
- * @len: size of area
- *
- * This is a simplified io_remap_pfn_range() for common driver use. The
- * driver just needs to give us the physical memory range to be mapped,
- * we'll figure out the rest from the vma information.
- *
- * NOTE! Some drivers might want to tweak vma->vm_page_prot first to get
- * whatever write-combining details or similar.
- */
-int vm_iomap_memory(struct vm_area_struct *vma, phys_addr_t start, unsigned long len)
-{
-	unsigned long vm_len, pfn, pages;
-
-	/* Check that the physical memory area passed in looks valid */
-	if (start + len < start)
-		return -EINVAL;
-	/*
-	 * You *really* shouldn't map things that aren't page-aligned,
-	 * but we've historically allowed it because IO memory might
-	 * just have smaller alignment.
-	 */
-	len += start & ~PAGE_MASK;
-	pfn = start >> PAGE_SHIFT;
-	pages = (len + ~PAGE_MASK) >> PAGE_SHIFT;
-	if (pfn + pages < pfn)
-		return -EINVAL;
-
-	/* We start the mapping 'vm_pgoff' pages into the area */
-	if (vma->vm_pgoff > pages)
-		return -EINVAL;
-	pfn += vma->vm_pgoff;
-	pages -= vma->vm_pgoff;
-
-	/* Can we fit all of the mapping? */
-	vm_len = vma->vm_end - vma->vm_start;
-	if (vm_len >> PAGE_SHIFT > pages)
-		return -EINVAL;
-
-	/* Ok, let it rip */
-	return io_remap_pfn_range(vma, vma->vm_start, pfn, vm_len, vma->vm_page_prot);
-}
-EXPORT_SYMBOL_GPL(vm_iomap_memory);
-
+#if 0
+/* backported to our kernel */
 /**
  *	prandom_bytes - get the requested number of pseudo-random bytes
  *	@buf: where to copy the pseudo-random bytes to
@@ -454,6 +388,7 @@ void prandom_bytes(void *buf, int bytes)
 	}
 }
 EXPORT_SYMBOL_GPL(prandom_bytes);
+#endif
 
 #ifdef CONFIG_OF
 /**

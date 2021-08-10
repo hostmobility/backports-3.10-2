@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2014  Hauke Mehrtens <hauke@hauke-m.de>
+ * Copyright (c) 2015  Luis R. Rodriguez <mcgrof@do-not-panic.com>
  *
  * Backport functionality introduced in Linux 3.15.
  *
@@ -11,6 +12,11 @@
 #include <linux/kernel.h>
 #include <linux/device.h>
 #include <linux/of.h>
+#include <linux/string.h>
+#include <linux/mm.h>
+#include <linux/slab.h>
+#include <linux/vmalloc.h>
+#include <net/net_namespace.h>
 
 /**
  * devm_kstrdup - Allocate resource managed space and
@@ -71,3 +77,12 @@ int of_property_count_elems_of_size(const struct device_node *np,
 }
 EXPORT_SYMBOL_GPL(of_property_count_elems_of_size);
 #endif
+
+void kvfree(const void *addr)
+{
+	if (is_vmalloc_addr(addr))
+		vfree(addr);
+	else
+		kfree(addr);
+}
+EXPORT_SYMBOL_GPL(kvfree);

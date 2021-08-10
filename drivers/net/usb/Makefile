@@ -8,6 +8,7 @@
 #obj-$(CPTCFG_USB_RTL8150)	+= rtl8150.o
 #obj-$(CPTCFG_USB_RTL8152)	+= r8152.o
 #obj-$(CPTCFG_USB_HSO)		+= hso.o
+#obj-$(CPTCFG_USB_LAN78XX)	+= lan78xx.o
 #obj-$(CPTCFG_USB_NET_AX8817X)	+= asix.o
 #obj-$(CPTCFG_USB_NET_AX88179_178A)      += ax88179_178a.o
 obj-$(CPTCFG_USB_NET_CDCETHER)	+= cdc_ether.o
@@ -21,7 +22,7 @@ obj-$(CPTCFG_USB_NET_CDCETHER)	+= cdc_ether.o
 #obj-$(CPTCFG_USB_NET_NET1080)	+= net1080.o
 #obj-$(CPTCFG_USB_NET_PLUSB)	+= plusb.o
 obj-$(CPTCFG_USB_NET_RNDIS_HOST)	+= rndis_host.o
-#obj-$(CPTCFG_USB_NET_CDC_SUBSET)	+= cdc_subset.o
+#obj-$(CPTCFG_USB_NET_CDC_SUBSET_ENABLE)	+= cdc_subset.o
 #obj-$(CPTCFG_USB_NET_ZAURUS)	+= zaurus.o
 #obj-$(CPTCFG_USB_NET_MCS7830)	+= mcs7830.o
 obj-$(CPTCFG_USB_USBNET)	+= usbnet.o
@@ -36,4 +37,4 @@ obj-$(CPTCFG_USB_NET_CDC_NCM)	+= cdc_ncm.o
 #obj-$(CPTCFG_USB_VL600)		+= lg-vl600.o
 obj-$(CPTCFG_USB_NET_QMI_WWAN)	+= qmi_wwan.o
 obj-$(CPTCFG_USB_NET_CDC_MBIM)	+= cdc_mbim.o
-
+#obj-$(CPTCFG_USB_NET_CH9200)	+= ch9200.o

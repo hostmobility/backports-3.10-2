@@ -3,73 +3,6 @@
 #include_next <linux/pci.h>
 #include <linux/version.h>
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,29)
-#define compat_pci_suspend(fn)						\
-	int fn##_compat(struct pci_dev *pdev, pm_message_t state) 	\
-	{								\
-		int r;							\
-									\
-		r = fn(&pdev->dev);					\
-		if (r)							\
-			return r;					\
-									\
-		pci_save_state(pdev);					\
-		pci_disable_device(pdev);				\
-		pci_set_power_state(pdev, PCI_D3hot);			\
-									\
-		return 0;						\
-	}
-
-#define compat_pci_resume(fn)						\
-	int fn##_compat(struct pci_dev *pdev)				\
-	{								\
-		int r;							\
-									\
-		pci_set_power_state(pdev, PCI_D0);			\
-		r = pci_enable_device(pdev);				\
-		if (r)							\
-			return r;					\
-		pci_restore_state(pdev);				\
-									\
-		return fn(&pdev->dev);					\
-	}
-#elif LINUX_VERSION_CODE == KERNEL_VERSION(2,6,29)
-#define compat_pci_suspend(fn)						\
-	int fn##_compat(struct device *dev)			 	\
-	{								\
-		struct pci_dev *pdev = to_pci_dev(dev);			\
-		int r;							\
-									\
-		r = fn(&pdev->dev);					\
-		if (r)							\
-			return r;					\
-									\
-		pci_save_state(pdev);					\
-		pci_disable_device(pdev);				\
-		pci_set_power_state(pdev, PCI_D3hot);			\
-									\
-		return 0;						\
-	}
-
-#define compat_pci_resume(fn)						\
-	int fn##_compat(struct device *dev)				\
-	{								\
-		struct pci_dev *pdev = to_pci_dev(dev);			\
-		int r;							\
-									\
-		pci_set_power_state(pdev, PCI_D0);			\
-		r = pci_enable_device(pdev);				\
-		if (r)							\
-			return r;					\
-		pci_restore_state(pdev);				\
-									\
-		return fn(&pdev->dev);					\
-	}
-#else
-#define compat_pci_suspend(fn)
-#define compat_pci_resume(fn)
-#endif
-
 #ifndef module_pci_driver
 /**
  * module_pci_driver() - Helper macro for registering a PCI driver
@@ -84,7 +17,7 @@
 		       pci_unregister_driver)
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,7,0)
+#if LINUX_VERSION_IS_LESS(3,7,0)
 #define pcie_capability_read_word LINUX_BACKPORT(pcie_capability_read_word)
 int pcie_capability_read_word(struct pci_dev *dev, int pos, u16 *val);
 #define pcie_capability_read_dword LINUX_BACKPORT(pcie_capability_read_dword)
@@ -129,39 +62,6 @@ static inline int pcie_capability_clear_dword(struct pci_dev *dev, int pos,
 }
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,33)
-/* mask pci_pcie_cap as debian squeeze also backports this */
-#define pci_pcie_cap LINUX_BACKPORT(pci_pcie_cap)
-static inline int pci_pcie_cap(struct pci_dev *dev)
-{
-	return pci_find_capability(dev, PCI_CAP_ID_EXP);
-}
-
-/* mask pci_is_pcie as RHEL6 backports this */
-#define pci_is_pcie LINUX_BACKPORT(pci_is_pcie)
-static inline bool pci_is_pcie(struct pci_dev *dev)
-{
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,24))
-	return dev->is_pcie;
-#else
-	return !!pci_pcie_cap(dev);
-#endif
-}
-#endif /* < 2.6.33 */
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,28)
-#define pci_ioremap_bar LINUX_BACKPORT(pci_ioremap_bar)
-void __iomem *pci_ioremap_bar(struct pci_dev *pdev, int bar);
-
-#define pci_wake_from_d3 LINUX_BACKPORT(pci_wake_from_d3)
-int pci_wake_from_d3(struct pci_dev *dev, bool enable);
-#endif
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,27)
-#define pci_pme_capable LINUX_BACKPORT(pci_pme_capable)
-bool pci_pme_capable(struct pci_dev *dev, pci_power_t state);
-#endif
-
 #ifndef PCI_DEVICE_SUB
 /**
  * PCI_DEVICE_SUB - macro used to describe a specific pci device with subsystem
@@ -178,7 +78,7 @@ bool pci_pme_capable(struct pci_dev *dev, pci_power_t state);
 	.subvendor = (subvend), .subdevice = (subdev)
 #endif /* PCI_DEVICE_SUB */
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,2,0)
+#if LINUX_VERSION_IS_LESS(3,2,0)
 #define pci_dev_flags LINUX_BACKPORT(pci_dev_flags)
 #define PCI_DEV_FLAGS_MSI_INTX_DISABLE_BUG LINUX_BACKPORT(PCI_DEV_FLAGS_MSI_INTX_DISABLE_BUG)
 #define PCI_DEV_FLAGS_NO_D3 LINUX_BACKPORT(PCI_DEV_FLAGS_NO_D3)
@@ -193,14 +93,14 @@ enum pci_dev_flags {
 	/* Provide indication device is assigned by a Virtual Machine Manager */
 	PCI_DEV_FLAGS_ASSIGNED = (__force pci_dev_flags_t) 4,
 };
-#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(3,2,0) */
+#endif /* LINUX_VERSION_IS_LESS(3,2,0) */
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,8,0)
+#if LINUX_VERSION_IS_LESS(3,8,0)
 #define pci_sriov_set_totalvfs LINUX_BACKPORT(pci_sriov_set_totalvfs)
 int pci_sriov_set_totalvfs(struct pci_dev *dev, u16 numvfs);
-#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(3,8,0) */
+#endif /* LINUX_VERSION_IS_LESS(3,8,0) */
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
+#if LINUX_VERSION_IS_LESS(3,10,0)
 /* Taken from drivers/pci/pci.h */
 struct pci_sriov {
 	int pos;		/* capability position */
@@ -232,9 +132,9 @@ static inline int pci_vfs_assigned(struct pci_dev *dev)
 }
 #endif
 
-#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0) */
+#endif /* LINUX_VERSION_IS_LESS(3,10,0) */
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(3,14,0)) && (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,30))
+#if LINUX_VERSION_IS_LESS(3,14,0)
 #define pci_enable_msi_range LINUX_BACKPORT(pci_enable_msi_range)
 #ifdef CONFIG_PCI_MSI
 int pci_enable_msi_range(struct pci_dev *dev, int minvec, int maxvec);
@@ -246,7 +146,7 @@ static inline int pci_enable_msi_range(struct pci_dev *dev, int minvec,
 #endif
 
 #ifdef CONFIG_PCI
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,14,0)
+#if LINUX_VERSION_IS_LESS(3,14,0)
 #define pci_enable_msix_range LINUX_BACKPORT(pci_enable_msix_range)
 #ifdef CONFIG_PCI_MSI
 int pci_enable_msix_range(struct pci_dev *dev, struct msix_entry *entries,
@@ -258,5 +158,30 @@ static inline int pci_enable_msix_range(struct pci_dev *dev,
 #endif
 #endif
 #endif
+
+#if LINUX_VERSION_IS_LESS(3,13,0)
+#define pci_device_is_present LINUX_BACKPORT(pci_device_is_present)
+bool pci_device_is_present(struct pci_dev *pdev);
+#endif
+
+#ifdef CONFIG_PCI
+#if LINUX_VERSION_IS_LESS(3,14,0)
+#define pci_enable_msix_exact LINUX_BACKPORT(pci_enable_msix_exact)
+#ifdef CONFIG_PCI_MSI
+static inline int pci_enable_msix_exact(struct pci_dev *dev,
+					struct msix_entry *entries, int nvec)
+{
+	int rc = pci_enable_msix_range(dev, entries, nvec, nvec);
+	if (rc < 0)
+		return rc;
+	return 0;
+}
+#else
+static inline int pci_enable_msix_exact(struct pci_dev *dev,
+		      struct msix_entry *entries, int nvec)
+{ return -ENOSYS; }
+#endif /* CONFIG_PCI_MSI */
+#endif
+#endif /* CONFIG_PCI */
 
 #endif /* _BACKPORT_LINUX_PCI_H */

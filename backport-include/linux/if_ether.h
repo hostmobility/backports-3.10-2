@@ -12,7 +12,7 @@
  * commit e5c5d22e8dcf7c2d430336cbf8e180bd38e8daf1
  * Author: Simon Horman <horms@verge.net.au>
  * Date:   Thu Mar 28 13:38:25 2013 +0900
- * 
+ *
  *     net: add ETH_P_802_3_MIN
  */
 #ifndef ETH_P_802_3_MIN
@@ -27,11 +27,6 @@
 #define ETH_P_LINK_CTL	0x886c
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,0,0)
-#define mac_pton LINUX_BACKPORT(mac_pton)
-int mac_pton(const char *s, u8 *mac);
-#endif
-
 #ifndef ETH_P_PAE
 #define ETH_P_PAE 0x888E      /* Port Access Entity (IEEE 802.1X) */
 #endif
@@ -42,6 +37,14 @@ int mac_pton(const char *s, u8 *mac);
 
 #ifndef ETH_P_8021AD
 #define ETH_P_8021AD	0x88A8          /* 802.1ad Service VLAN		*/
+#endif
+
+#ifndef ETH_MIN_MTU
+#define ETH_MIN_MTU	68
+#endif
+
+#ifndef ETH_MAX_MTU
+#define ETH_MAX_MTU	0xFFFFU
 #endif
 
 #endif /* __BACKPORT_IF_ETHER_H */
