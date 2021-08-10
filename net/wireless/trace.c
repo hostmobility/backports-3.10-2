@@ -1,7 +1,5 @@
 #include <linux/module.h>
-#if LINUX_VERSION_IS_LESS(3,2,0)
-#include <linux/interrupt.h>
-#endif
+#include "trace.h"
 
 #ifndef __CHECKER__
 #define CREATE_TRACE_POINTS

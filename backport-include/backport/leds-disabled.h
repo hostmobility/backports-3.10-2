@@ -8,11 +8,10 @@
  * allows compilation.
  */
 
-#ifdef CPTCFG_BPAUTO_BUILD_LEDS
+#ifdef CPTCFG_BACKPORT_BUILD_LEDS
 #include <linux/list.h>
 #include <linux/spinlock.h>
 #include <linux/rwsem.h>
-#include <linux/mutex.h>
 #include <linux/workqueue.h>
 
 #define led_classdev LINUX_BACKPORT(led_classdev)
@@ -20,8 +19,8 @@
 
 struct led_classdev {
 	const char		*name;
-	enum led_brightness	 brightness;
-	enum led_brightness	 max_brightness;
+	int			 brightness;
+	int			 max_brightness;
 	int			 flags;
 
 	/* Lower 16 bits reflect status */
@@ -32,22 +31,12 @@ struct led_classdev {
 #define LED_BLINK_ONESHOT	(1 << 17)
 #define LED_BLINK_ONESHOT_STOP	(1 << 18)
 #define LED_BLINK_INVERT	(1 << 19)
-#define LED_SYSFS_DISABLE	(1 << 20)
-#define SET_BRIGHTNESS_ASYNC	(1 << 21)
-#define SET_BRIGHTNESS_SYNC	(1 << 22)
-#define LED_DEV_CAP_FLASH	(1 << 23)
 #endif
 
 	/* Set LED brightness level */
 	/* Must not sleep, use a workqueue if needed */
 	void		(*brightness_set)(struct led_classdev *led_cdev,
 					  enum led_brightness brightness);
-	/*
-	 * Set LED brightness level immediately - it can block the caller for
-	 * the time required for accessing a LED device register.
-	 */
-	int		(*brightness_set_sync)(struct led_classdev *led_cdev,
-					enum led_brightness brightness);
 	/* Get LED brightness level */
 	enum led_brightness (*brightness_get)(struct led_classdev *led_cdev);
 
@@ -64,15 +53,12 @@ struct led_classdev {
 				     unsigned long *delay_off);
 
 	struct device		*dev;
-	const struct attribute_group	**groups;
-
 	struct list_head	 node;			/* LED Device list */
 	const char		*default_trigger;	/* Trigger to use */
 
 	unsigned long		 blink_delay_on, blink_delay_off;
 	struct timer_list	 blink_timer;
 	int			 blink_brightness;
-	void			(*flash_resume)(struct led_classdev *led_cdev);
 
 	struct work_struct	set_brightness_work;
 	int			delayed_set_value;
@@ -85,9 +71,6 @@ struct led_classdev {
 	void			*trigger_data;
 	/* true if activated - deactivate routine uses it to do cleanup */
 	bool			activated;
-
-	/* Ensures consistent access to the LED Flash Class device */
-	struct mutex		led_access;
 };
 
 struct led_trigger {
@@ -116,10 +99,6 @@ struct led_trigger {
 #define led_trigger_register LINUX_BACKPORT(led_trigger_register)
 #undef led_trigger_unregister
 #define led_trigger_unregister LINUX_BACKPORT(led_trigger_unregister)
-#undef led_trigger_register_simple
-#define led_trigger_register_simple LINUX_BACKPORT(led_trigger_register_simple)
-#undef led_trigger_unregister_simple
-#define led_trigger_unregister_simple LINUX_BACKPORT(led_trigger_unregister_simple)
 #undef led_trigger_event
 #define led_trigger_event LINUX_BACKPORT(led_trigger_event)
 
@@ -133,15 +112,6 @@ static inline int led_classdev_register(struct device *parent,
 }
 
 static inline void led_classdev_unregister(struct led_classdev *led_cdev)
-{
-}
-
-static inline void led_trigger_register_simple(const char *name,
-					       struct led_trigger **trigger)
-{
-}
-
-static inline void led_trigger_unregister_simple(struct led_trigger *trigger)
 {
 }
 
@@ -178,19 +148,6 @@ static inline void led_trigger_unregister(struct led_trigger *trigger)
 
 static inline void led_trigger_event(struct led_trigger *trigger,
 				     enum led_brightness event)
-{
-}
-
-static inline void led_trigger_blink(struct led_trigger *trigger,
-				     unsigned long *delay_on,
-				     unsigned long *delay_off)
-{
-}
-
-static inline void led_trigger_blink_oneshot(struct led_trigger *trigger,
-					     unsigned long *delay_on,
-					     unsigned long *delay_off,
-					     int invert)
 {
 }
 #endif

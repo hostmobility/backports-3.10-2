@@ -3,6 +3,15 @@
 #include_next <linux/i2c.h>
 #include <linux/version.h>
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,2,0) && \
+    LINUX_VERSION_CODE < KERNEL_VERSION(3,6,0)
+#include <linux/i2c.h>
+/* Unlocked flavor */
+#define __i2c_transfer LINUX_BACKPORT(__i2c_transfer)
+extern int __i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs,
+			  int num);
+#endif
+
 /* This backports
  *
  * commit 14674e70119ea01549ce593d8901a797f8a90f74
@@ -27,11 +36,6 @@
 #define module_i2c_driver(__i2c_driver) \
 	module_driver(__i2c_driver, i2c_add_driver, \
 			i2c_del_driver)
-#endif
-
-#ifndef I2C_CLIENT_SCCB
-#define I2C_CLIENT_SCCB	0x9000		/* Use Omnivision SCCB protocol */
-					/* Must match I2C_M_STOP|IGNORE_NAK */
 #endif
 
 #endif /* __BACKPORT_LINUX_I2C_H */

@@ -37,6 +37,7 @@
  *    OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/etherdevice.h>
@@ -720,12 +721,12 @@ static void carl9170_tx_rate_tpc_chains(struct ar9170 *ar,
 			/* +1 dBm for HT40 */
 			*tpc += 2;
 
-			if (info->band == NL80211_BAND_2GHZ)
+			if (info->band == IEEE80211_BAND_2GHZ)
 				txpower = ar->power_2G_ht40;
 			else
 				txpower = ar->power_5G_ht40;
 		} else {
-			if (info->band == NL80211_BAND_2GHZ)
+			if (info->band == IEEE80211_BAND_2GHZ)
 				txpower = ar->power_2G_ht20;
 			else
 				txpower = ar->power_5G_ht20;
@@ -734,7 +735,7 @@ static void carl9170_tx_rate_tpc_chains(struct ar9170 *ar,
 		*phyrate = txrate->idx;
 		*tpc += txpower[idx & 7];
 	} else {
-		if (info->band == NL80211_BAND_2GHZ) {
+		if (info->band == IEEE80211_BAND_2GHZ) {
 			if (idx < 4)
 				txpower = ar->power_2G_cck;
 			else
@@ -797,7 +798,7 @@ static __le32 carl9170_tx_physet(struct ar9170 *ar,
 		 * tmp |= cpu_to_le32(AR9170_TX_PHY_GREENFIELD);
 		 */
 	} else {
-		if (info->band == NL80211_BAND_2GHZ) {
+		if (info->band == IEEE80211_BAND_2GHZ) {
 			if (txrate->idx <= AR9170_TX_PHY_RATE_CCK_11M)
 				tmp |= cpu_to_le32(AR9170_TX_PHY_MOD_CCK);
 			else
@@ -1557,7 +1558,7 @@ static struct carl9170_vif_info *carl9170_pick_beaconing_vif(struct ar9170 *ar)
 	}
 
 out:
-	RCU_INIT_POINTER(ar->beacon_iter, cvif);
+	rcu_assign_pointer(ar->beacon_iter, cvif);
 	return cvif;
 }
 

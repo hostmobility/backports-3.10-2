@@ -10,7 +10,29 @@
 
 #include <linux/idr.h>
 #include <linux/cpufreq.h>
-#include <linux/of.h>
+
+/* This backports:
+ * commit 3d73710880afa3d61cf57b5d4eb192e812eb7e4f
+ * Author: Jesse Barnes <jbarnes@virtuousgeek.org>
+ * Date:   Tue Jun 28 10:59:12 2011 -0700
+ *
+ * 	cpufreq: expose a cpufreq_quick_get_max routine
+ */
+#ifdef CONFIG_CPU_FREQ
+unsigned int cpufreq_quick_get_max(unsigned int cpu)
+{
+	struct cpufreq_policy *policy = cpufreq_cpu_get(cpu);
+	unsigned int ret_freq = 0;
+
+	if (policy) {
+		ret_freq = policy->max;
+		cpufreq_cpu_put(policy);
+	}
+
+	return ret_freq;
+}
+EXPORT_SYMBOL_GPL(cpufreq_quick_get_max);
+#endif
 
 static DEFINE_SPINLOCK(compat_simple_ida_lock);
 
@@ -83,36 +105,3 @@ void ida_simple_remove(struct ida *ida, unsigned int id)
 EXPORT_SYMBOL_GPL(ida_simple_remove);
 /* source lib/idr.c */
 
-#ifdef CONFIG_OF
-/**
- * of_property_read_u32_array - Find and read an array of 32 bit integers
- * from a property.
- *
- * @np:		device node from which the property value is to be read.
- * @propname:	name of the property to be searched.
- * @out_values:	pointer to return value, modified only if return value is 0.
- * @sz:		number of array elements to read
- *
- * Search for a property in a device node and read 32-bit value(s) from
- * it. Returns 0 on success, -EINVAL if the property does not exist,
- * -ENODATA if property does not have a value, and -EOVERFLOW if the
- * property data isn't large enough.
- *
- * The out_values is modified only if a valid u32 value can be decoded.
- */
-int of_property_read_u32_array(const struct device_node *np,
-			       const char *propname, u32 *out_values,
-			       size_t sz)
-{
-	const __be32 *val = of_find_property_value_of_size(np, propname,
-						(sz * sizeof(*out_values)));
-
-	if (IS_ERR(val))
-		return PTR_ERR(val);
-
-	while (sz--)
-		*out_values++ = be32_to_cpup(val++);
-	return 0;
-}
-EXPORT_SYMBOL_GPL(of_property_read_u32_array);
-#endif

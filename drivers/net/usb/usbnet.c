@@ -14,7 +14,8 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 /*
@@ -58,20 +59,21 @@
  * For high speed, each frame comfortably fits almost 36 max size
  * Ethernet packets (so queues should be bigger).
  *
- * The goal is to let the USB host controller be busy for 5msec or
- * more before an irq is required, under load.  Jumbograms change
- * the equation.
+ * REVISIT qlens should be members of 'struct usbnet'; the goal is to
+ * let the USB host controller be busy for 5msec or more before an irq
+ * is required, under load.  Jumbograms change the equation.
  */
-#define	MAX_QUEUE_MEMORY	(60 * 1518)
-#define	RX_QLEN(dev)		((dev)->rx_qlen)
-#define	TX_QLEN(dev)		((dev)->tx_qlen)
+#define RX_MAX_QUEUE_MEMORY (60 * 1518)
+#define	RX_QLEN(dev) (((dev)->udev->speed == USB_SPEED_HIGH) ? \
+			(RX_MAX_QUEUE_MEMORY/(dev)->rx_urb_size) : 4)
+#define	TX_QLEN(dev) (((dev)->udev->speed == USB_SPEED_HIGH) ? \
+			(RX_MAX_QUEUE_MEMORY/(dev)->hard_mtu) : 4)
 
 // reawaken network queue this soon after stopping; else watchdog barks
 #define TX_TIMEOUT_JIFFIES	(5*HZ)
 
-/* throttle rx/tx briefly after some faults, so hub_wq might disconnect()
- * us (it polls at HZ/4 usually) before we report too many false errors.
- */
+// throttle rx/tx briefly after some faults, so khubd might disconnect()
+// us (it polls at HZ/4 usually) before we report too many false errors.
 #define THROTTLE_JIFFIES	(HZ/8)
 
 // between wakeups
@@ -160,19 +162,20 @@ EXPORT_SYMBOL_GPL(usbnet_get_endpoints);
 
 int usbnet_get_ethernet_addr(struct usbnet *dev, int iMACAddress)
 {
-	int 		tmp = -1, ret;
+	int 		tmp, i;
 	unsigned char	buf [13];
 
-	ret = usb_string(dev->udev, iMACAddress, buf, sizeof buf);
-	if (ret == 12)
-		tmp = hex2bin(dev->net->dev_addr, buf, 6);
-	if (tmp < 0) {
+	tmp = usb_string(dev->udev, iMACAddress, buf, sizeof buf);
+	if (tmp != 12) {
 		dev_dbg(&dev->udev->dev,
 			"bad MAC string %d fetch, %d\n", iMACAddress, tmp);
-		if (ret >= 0)
-			ret = -EINVAL;
-		return ret;
+		if (tmp >= 0)
+			tmp = -EINVAL;
+		return tmp;
 	}
+	for (i = tmp = 0; i < 6; i++, tmp += 2)
+		dev->net->dev_addr [i] =
+			(hex_to_bin(buf[tmp]) << 4) + hex_to_bin(buf[tmp + 1]);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(usbnet_get_ethernet_addr);
@@ -202,6 +205,9 @@ static void intr_complete (struct urb *urb)
 		netdev_dbg(dev->net, "intr status %d\n", status);
 		break;
 	}
+
+	if (!netif_running (dev->net))
+		return;
 
 	status = usb_submit_urb (urb, GFP_ATOMIC);
 	if (status != 0)
@@ -323,10 +329,7 @@ void usbnet_skb_return (struct usbnet *dev, struct sk_buff *skb)
 		return;
 	}
 
-	/* only update if unset to allow minidriver rx_fixup override */
-	if (skb->protocol == 0)
-		skb->protocol = eth_type_trans (skb, dev->net);
-
+	skb->protocol = eth_type_trans (skb, dev->net);
 	dev->net->stats.rx_packets++;
 	dev->net->stats.rx_bytes += skb->len;
 
@@ -344,32 +347,6 @@ void usbnet_skb_return (struct usbnet *dev, struct sk_buff *skb)
 }
 EXPORT_SYMBOL_GPL(usbnet_skb_return);
 
-/* must be called if hard_mtu or rx_urb_size changed */
-void usbnet_update_max_qlen(struct usbnet *dev)
-{
-	enum usb_device_speed speed = dev->udev->speed;
-
-	switch (speed) {
-	case USB_SPEED_HIGH:
-		dev->rx_qlen = MAX_QUEUE_MEMORY / dev->rx_urb_size;
-		dev->tx_qlen = MAX_QUEUE_MEMORY / dev->hard_mtu;
-		break;
-	case USB_SPEED_SUPER:
-	case USB_SPEED_SUPER_PLUS:
-		/*
-		 * Not take default 5ms qlen for super speed HC to
-		 * save memory, and iperf tests show 2.5ms qlen can
-		 * work well
-		 */
-		dev->rx_qlen = 5 * MAX_QUEUE_MEMORY / dev->rx_urb_size;
-		dev->tx_qlen = 5 * MAX_QUEUE_MEMORY / dev->hard_mtu;
-		break;
-	default:
-		dev->rx_qlen = dev->tx_qlen = 4;
-	}
-}
-EXPORT_SYMBOL_GPL(usbnet_update_max_qlen);
-
 
 /*-------------------------------------------------------------------------
  *
@@ -384,6 +361,8 @@ int usbnet_change_mtu (struct net_device *net, int new_mtu)
 	int		old_hard_mtu = dev->hard_mtu;
 	int		old_rx_urb_size = dev->rx_urb_size;
 
+	if (new_mtu <= 0)
+		return -EINVAL;
 	// no second zero-length packet read wanted after mtu-sized packets
 	if ((ll_mtu % dev->maxpacket) == 0)
 		return -EDOM;
@@ -392,15 +371,9 @@ int usbnet_change_mtu (struct net_device *net, int new_mtu)
 	dev->hard_mtu = net->mtu + net->hard_header_len;
 	if (dev->rx_urb_size == old_hard_mtu) {
 		dev->rx_urb_size = dev->hard_mtu;
-		if (dev->rx_urb_size > old_rx_urb_size) {
-			usbnet_pause_rx(dev);
+		if (dev->rx_urb_size > old_rx_urb_size)
 			usbnet_unlink_rx_urbs(dev);
-			usbnet_resume_rx(dev);
-		}
 	}
-
-	/* max qlen depend on hard_mtu and rx_urb_size */
-	usbnet_update_max_qlen(dev);
 
 	return 0;
 }
@@ -433,18 +406,12 @@ static enum skb_state defer_bh(struct usbnet *dev, struct sk_buff *skb,
 	old_state = entry->state;
 	entry->state = state;
 	__skb_unlink(skb, list);
-
-	/* defer_bh() is never called with list == &dev->done.
-	 * spin_lock_nested() tells lockdep that it is OK to take
-	 * dev->done.lock here with list->lock held.
-	 */
-	spin_lock_nested(&dev->done.lock, SINGLE_DEPTH_NESTING);
-
+	spin_unlock(&list->lock);
+	spin_lock(&dev->done.lock);
 	__skb_queue_tail(&dev->done, skb);
 	if (dev->done.qlen == 1)
 		tasklet_schedule(&dev->bh);
-	spin_unlock(&dev->done.lock);
-	spin_unlock_irqrestore(&list->lock, flags);
+	spin_unlock_irqrestore(&dev->done.lock, flags);
 	return old_state;
 }
 
@@ -553,19 +520,17 @@ static inline void rx_process (struct usbnet *dev, struct sk_buff *skb)
 	}
 	// else network stack removes extra byte if we forced a short packet
 
-	/* all data was already cloned from skb inside the driver */
-	if (dev->driver_info->flags & FLAG_MULTI_PACKET)
-		goto done;
-
-	if (skb->len < ETH_HLEN) {
-		dev->net->stats.rx_errors++;
-		dev->net->stats.rx_length_errors++;
-		netif_dbg(dev, rx_err, dev->net, "rx length %d\n", skb->len);
-	} else {
-		usbnet_skb_return(dev, skb);
+	if (skb->len) {
+		/* all data was already cloned from skb inside the driver */
+		if (dev->driver_info->flags & FLAG_MULTI_PACKET)
+			dev_kfree_skb_any(skb);
+		else
+			usbnet_skb_return(dev, skb);
 		return;
 	}
 
+	netif_dbg(dev, rx_err, dev->net, "drop\n");
+	dev->net->stats.rx_errors++;
 done:
 	skb_queue_tail(&dev->done, skb);
 }
@@ -587,6 +552,13 @@ static void rx_complete (struct urb *urb)
 	switch (urb_status) {
 	/* success */
 	case 0:
+		if (skb->len < dev->net->hard_header_len) {
+			state = rx_cleanup;
+			dev->net->stats.rx_errors++;
+			dev->net->stats.rx_length_errors++;
+			netif_dbg(dev, rx_err, dev->net,
+				  "rx length %d\n", skb->len);
+		}
 		break;
 
 	/* stalls need manual reset. this is rare ... except that
@@ -606,9 +578,9 @@ static void rx_complete (struct urb *urb)
 			  "rx shutdown, code %d\n", urb_status);
 		goto block;
 
-	/* we get controller i/o faults during hub_wq disconnect() delays.
+	/* we get controller i/o faults during khubd disconnect() delays.
 	 * throttle down resubmits, to avoid log floods; just temporarily,
-	 * so we still recover when the fault isn't a hub_wq delay.
+	 * so we still recover when the fault isn't a khubd delay.
 	 */
 	case -EPROTO:
 	case -ETIME:
@@ -760,47 +732,39 @@ EXPORT_SYMBOL_GPL(usbnet_unlink_rx_urbs);
 
 /*-------------------------------------------------------------------------*/
 
-static void wait_skb_queue_empty(struct sk_buff_head *q)
-{
-	unsigned long flags;
-
-	spin_lock_irqsave(&q->lock, flags);
-	while (!skb_queue_empty(q)) {
-		spin_unlock_irqrestore(&q->lock, flags);
-		schedule_timeout(msecs_to_jiffies(UNLINK_TIMEOUT_MS));
-		set_current_state(TASK_UNINTERRUPTIBLE);
-		spin_lock_irqsave(&q->lock, flags);
-	}
-	spin_unlock_irqrestore(&q->lock, flags);
-}
-
 // precondition: never called in_interrupt
 static void usbnet_terminate_urbs(struct usbnet *dev)
 {
+	DECLARE_WAIT_QUEUE_HEAD_ONSTACK(unlink_wakeup);
 	DECLARE_WAITQUEUE(wait, current);
 	int temp;
 
 	/* ensure there are no more active urbs */
-	add_wait_queue(&dev->wait, &wait);
+	add_wait_queue(&unlink_wakeup, &wait);
 	set_current_state(TASK_UNINTERRUPTIBLE);
+	dev->wait = &unlink_wakeup;
 	temp = unlink_urbs(dev, &dev->txq) +
 		unlink_urbs(dev, &dev->rxq);
 
 	/* maybe wait for deletions to finish. */
-	wait_skb_queue_empty(&dev->rxq);
-	wait_skb_queue_empty(&dev->txq);
-	wait_skb_queue_empty(&dev->done);
-	netif_dbg(dev, ifdown, dev->net,
-		  "waited for %d urb completions\n", temp);
+	while (!skb_queue_empty(&dev->rxq)
+		&& !skb_queue_empty(&dev->txq)
+		&& !skb_queue_empty(&dev->done)) {
+			schedule_timeout(msecs_to_jiffies(UNLINK_TIMEOUT_MS));
+			set_current_state(TASK_UNINTERRUPTIBLE);
+			netif_dbg(dev, ifdown, dev->net,
+				  "waited for %d urb completions\n", temp);
+	}
 	set_current_state(TASK_RUNNING);
-	remove_wait_queue(&dev->wait, &wait);
+	dev->wait = NULL;
+	remove_wait_queue(&unlink_wakeup, &wait);
 }
 
 int usbnet_stop (struct net_device *net)
 {
 	struct usbnet		*dev = netdev_priv(net);
 	struct driver_info	*info = dev->driver_info;
-	int			retval, pm, mpn;
+	int			retval;
 
 	clear_bit(EVENT_DEV_OPEN, &dev->flags);
 	netif_stop_queue (net);
@@ -810,8 +774,6 @@ int usbnet_stop (struct net_device *net)
 		   net->stats.rx_packets, net->stats.tx_packets,
 		   net->stats.rx_errors, net->stats.tx_errors);
 
-	/* to not race resume */
-	pm = usb_autopm_get_interface(dev->intf);
 	/* allow minidriver to stop correctly (wireless devices to turn off
 	 * radio etc) */
 	if (info->stop) {
@@ -831,8 +793,6 @@ int usbnet_stop (struct net_device *net)
 
 	usbnet_purge_paused_rxq(dev);
 
-	mpn = !test_and_clear_bit(EVENT_NO_RUNTIME_PM, &dev->flags);
-
 	/* deferred work (task, timer, softirq) must also stop.
 	 * can't flush_scheduled_work() until we drop rtnl (later),
 	 * else workers could deadlock; so make workers a NOP.
@@ -840,10 +800,8 @@ int usbnet_stop (struct net_device *net)
 	dev->flags = 0;
 	del_timer_sync (&dev->delay);
 	tasklet_kill (&dev->bh);
-	if (!pm)
-		usb_autopm_put_interface(dev->intf);
-
-	if (info->manage_power && mpn)
+	if (info->manage_power &&
+	    !test_and_clear_bit(EVENT_NO_RUNTIME_PM, &dev->flags))
 		info->manage_power(dev, 0);
 	else
 		usb_autopm_put_interface(dev->intf);
@@ -884,9 +842,6 @@ int usbnet_open (struct net_device *net)
 			   info->description);
 		goto done;
 	}
-
-	/* hard_mtu or rx_urb_size may change in reset() */
-	usbnet_update_max_qlen(dev);
 
 	// insist peer be connected
 	if (info->check_connect && (retval = info->check_connect (dev)) < 0) {
@@ -972,9 +927,6 @@ int usbnet_set_settings (struct net_device *net, struct ethtool_cmd *cmd)
 	if (dev->driver_info->link_reset)
 		dev->driver_info->link_reset(dev);
 
-	/* hard_mtu or rx_urb_size may change in link_reset() */
-	usbnet_update_max_qlen(dev);
-
 	return retval;
 
 }
@@ -1045,9 +997,9 @@ static const struct ethtool_ops usbnet_ethtool_ops = {
 	.get_drvinfo		= usbnet_get_drvinfo,
 	.get_msglevel		= usbnet_get_msglevel,
 	.set_msglevel		= usbnet_set_msglevel,
-#if LINUX_VERSION_IS_GEQ(3,5,0)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,5,0))
 	.get_ts_info		= ethtool_op_get_ts_info,
-#endif /* LINUX_VERSION_IS_GEQ(3,5,0) */
+#endif
 };
 
 /*-------------------------------------------------------------------------*/
@@ -1070,25 +1022,7 @@ static void __handle_link_change(struct usbnet *dev)
 		tasklet_schedule(&dev->bh);
 	}
 
-	/* hard_mtu or rx_urb_size may change during link change */
-	usbnet_update_max_qlen(dev);
-
 	clear_bit(EVENT_LINK_CHANGE, &dev->flags);
-}
-
-static void usbnet_set_rx_mode(struct net_device *net)
-{
-	struct usbnet		*dev = netdev_priv(net);
-
-	usbnet_defer_kevent(dev, EVENT_SET_RX_MODE);
-}
-
-static void __handle_set_rx_mode(struct usbnet *dev)
-{
-	if (dev->driver_info->set_rx_mode)
-		(dev->driver_info->set_rx_mode)(dev);
-
-	clear_bit(EVENT_SET_RX_MODE, &dev->flags);
 }
 
 /* work that cannot be done in interrupt context uses keventd.
@@ -1097,7 +1031,7 @@ static void __handle_set_rx_mode(struct usbnet *dev)
  * especially now that control transfers can be queued.
  */
 static void
-usbnet_deferred_kevent (struct work_struct *work)
+kevent (struct work_struct *work)
 {
 	struct usbnet		*dev =
 		container_of(work, struct usbnet, kevent);
@@ -1196,10 +1130,6 @@ skip_reset:
 	if (test_bit (EVENT_LINK_CHANGE, &dev->flags))
 		__handle_link_change(dev);
 
-	if (test_bit (EVENT_SET_RX_MODE, &dev->flags))
-		__handle_set_rx_mode(dev);
-
-
 	if (dev->flags)
 		netdev_dbg(dev->net, "kevent done, flags = 0x%lx\n", dev->flags);
 }
@@ -1213,7 +1143,8 @@ static void tx_complete (struct urb *urb)
 	struct usbnet		*dev = entry->dev;
 
 	if (urb->status == 0) {
-		dev->net->stats.tx_packets += entry->packets;
+		if (!(dev->driver_info->flags & FLAG_MULTI_PACKET))
+			dev->net->stats.tx_packets++;
 		dev->net->stats.tx_bytes += entry->length;
 	} else {
 		dev->net->stats.tx_errors++;
@@ -1228,9 +1159,8 @@ static void tx_complete (struct urb *urb)
 		case -ESHUTDOWN:		// hardware gone
 			break;
 
-		/* like rx, tx gets controller i/o faults during hub_wq
-		 * delays and so it uses the same throttling mechanism.
-		 */
+		// like rx, tx gets controller i/o faults during khubd delays
+		// and so it uses the same throttling mechanism.
 		case -EPROTO:
 		case -ETIME:
 		case -EILSEQ:
@@ -1262,62 +1192,18 @@ void usbnet_tx_timeout (struct net_device *net)
 
 	unlink_urbs (dev, &dev->txq);
 	tasklet_schedule (&dev->bh);
-	/* this needs to be handled individually because the generic layer
-	 * doesn't know what is sufficient and could not restore private
-	 * information if a remedy of an unconditional reset were used.
-	 */
-	if (dev->driver_info->recover)
-		(dev->driver_info->recover)(dev);
+
+	// FIXME: device recovery -- reset?
 }
 EXPORT_SYMBOL_GPL(usbnet_tx_timeout);
 
 /*-------------------------------------------------------------------------*/
 
-#if LINUX_VERSION_IS_GEQ(3,35,0)
-static int build_dma_sg(const struct sk_buff *skb, struct urb *urb)
-{
-	unsigned num_sgs, total_len = 0;
-	int i, s = 0;
-
-	num_sgs = skb_shinfo(skb)->nr_frags + 1;
-	if (num_sgs == 1)
-		return 0;
-
-	/* reserve one for zero packet */
-	urb->sg = kmalloc((num_sgs + 1) * sizeof(struct scatterlist),
-			  GFP_ATOMIC);
-	if (!urb->sg)
-		return -ENOMEM;
-
-	urb->num_sgs = num_sgs;
-	sg_init_table(urb->sg, urb->num_sgs + 1);
-
-	sg_set_buf(&urb->sg[s++], skb->data, skb_headlen(skb));
-	total_len += skb_headlen(skb);
-
-	for (i = 0; i < skb_shinfo(skb)->nr_frags; i++) {
-		struct skb_frag_struct *f = &skb_shinfo(skb)->frags[i];
-
-		total_len += skb_frag_size(f);
-		sg_set_page(&urb->sg[i + s], f->page.p, f->size,
-				f->page_offset);
-	}
-	urb->transfer_buffer_length = total_len;
-
-	return 1;
-}
-#else
-static int build_dma_sg(const struct sk_buff *skb, struct urb *urb)
-{
-	return -ENXIO;
-}
-#endif
-
 netdev_tx_t usbnet_start_xmit (struct sk_buff *skb,
 				     struct net_device *net)
 {
 	struct usbnet		*dev = netdev_priv(net);
-	unsigned int			length;
+	int			length;
 	struct urb		*urb = NULL;
 	struct skb_data		*entry;
 	struct driver_info	*info = dev->driver_info;
@@ -1339,6 +1225,7 @@ netdev_tx_t usbnet_start_xmit (struct sk_buff *skb,
 			goto drop;
 		}
 	}
+	length = skb->len;
 
 	if (!(urb = usb_alloc_urb (0, GFP_ATOMIC))) {
 		netif_dbg(dev, tx_err, dev->net, "no urb\n");
@@ -1348,14 +1235,10 @@ netdev_tx_t usbnet_start_xmit (struct sk_buff *skb,
 	entry = (struct skb_data *) skb->cb;
 	entry->urb = urb;
 	entry->dev = dev;
+	entry->length = length;
 
 	usb_fill_bulk_urb (urb, dev->udev, dev->out,
 			skb->data, skb->len, tx_complete, skb);
-	if (dev->can_dma_sg) {
-		if (build_dma_sg(skb, urb) < 0)
-			goto drop;
-	}
-	length = urb->transfer_buffer_length;
 
 	/* don't assume the hardware handles USB_ZERO_PACKET
 	 * NOTE:  strictly conforming cdc-ether devices should expect
@@ -1367,36 +1250,14 @@ netdev_tx_t usbnet_start_xmit (struct sk_buff *skb,
 	if (length % dev->maxpacket == 0) {
 		if (!(info->flags & FLAG_SEND_ZLP)) {
 			if (!(info->flags & FLAG_MULTI_PACKET)) {
-				length++;
-#if LINUX_VERSION_IS_GEQ(3,35,0)
-				if (skb_tailroom(skb) && !urb->num_sgs) {
-					skb->data[skb->len] = 0;
-					__skb_put(skb, 1);
-				} else if (urb->num_sgs)
-					sg_set_buf(&urb->sg[urb->num_sgs++],
-							dev->padding_pkt, 1);
-#else
+				urb->transfer_buffer_length++;
 				if (skb_tailroom(skb)) {
 					skb->data[skb->len] = 0;
 					__skb_put(skb, 1);
 				}
-#endif
 			}
 		} else
 			urb->transfer_flags |= URB_ZERO_PACKET;
-	}
-	urb->transfer_buffer_length = length;
-
-	if (info->flags & FLAG_MULTI_PACKET) {
-		/* Driver has set number of packets and a length delta.
-		 * Calculate the complete length and ensure that it's
-		 * positive.
-		 */
-		entry->length += length;
-		if (WARN_ON_ONCE(entry->length <= 0))
-			entry->length = length;
-	} else {
-		usbnet_set_skb_tx_stats(skb, 1, length);
 	}
 
 	spin_lock_irqsave(&dev->txq.lock, flags);
@@ -1432,7 +1293,7 @@ netdev_tx_t usbnet_start_xmit (struct sk_buff *skb,
 			  "tx: submit urb err %d\n", retval);
 		break;
 	case 0:
-		netif_trans_update(net);
+		net->trans_start = jiffies;
 		__usbnet_queue_skb(&dev->txq, skb, tx_start);
 		if (dev->txq.qlen >= TX_QLEN (dev))
 			netif_stop_queue (net);
@@ -1446,15 +1307,10 @@ drop:
 not_drop:
 		if (skb)
 			dev_kfree_skb_any (skb);
-		if (urb) {
-#if LINUX_VERSION_IS_GEQ(3,35,0)
-			kfree(urb->sg);
-#endif
-			usb_free_urb(urb);
-		}
+		usb_free_urb (urb);
 	} else
 		netif_dbg(dev, tx_queued, dev->net,
-			  "> tx, len %u, type 0x%x\n", length, skb->protocol);
+			  "> tx, len %d, type 0x%x\n", length, skb->protocol);
 #ifdef CONFIG_PM
 deferred:
 #endif
@@ -1502,9 +1358,6 @@ static void usbnet_bh (unsigned long param)
 			rx_process (dev, skb);
 			continue;
 		case tx_done:
-#if LINUX_VERSION_IS_GEQ(3,35,0)
-			kfree(entry->urb->sg);
-#endif
 		case rx_cleanup:
 			usb_free_urb (entry->urb);
 			dev_kfree_skb (skb);
@@ -1517,20 +1370,18 @@ static void usbnet_bh (unsigned long param)
 	/* restart RX again after disabling due to high error rate */
 	clear_bit(EVENT_RX_KILL, &dev->flags);
 
-	/* waiting for all pending urbs to complete?
-	 * only then can we forgo submitting anew
-	 */
-	if (waitqueue_active(&dev->wait)) {
-		if (dev->txq.qlen + dev->rxq.qlen + dev->done.qlen == 0)
-			wake_up_all(&dev->wait);
+	// waiting for all pending urbs to complete?
+	if (dev->wait) {
+		if ((dev->txq.qlen + dev->rxq.qlen + dev->done.qlen) == 0) {
+			wake_up (dev->wait);
+		}
 
 	// or are we maybe short a few urbs?
 	} else if (netif_running (dev->net) &&
 		   netif_device_present (dev->net) &&
 		   netif_carrier_ok(dev->net) &&
-		   !timer_pending(&dev->delay) &&
-		   !test_bit(EVENT_RX_PAUSED, &dev->flags) &&
-		   !test_bit(EVENT_RX_HALT, &dev->flags)) {
+		   !timer_pending (&dev->delay) &&
+		   !test_bit (EVENT_RX_HALT, &dev->flags)) {
 		int	temp = dev->rxq.qlen;
 
 		if (temp < RX_QLEN(dev)) {
@@ -1587,30 +1438,16 @@ void usbnet_disconnect (struct usb_interface *intf)
 
 	usb_kill_urb(dev->interrupt);
 	usb_free_urb(dev->interrupt);
-	kfree(dev->padding_pkt);
 
 	free_netdev(net);
 }
 EXPORT_SYMBOL_GPL(usbnet_disconnect);
 
-#if LINUX_VERSION_IS_LESS(4,10,0)
-static int __change_mtu(struct net_device *ndev, int new_mtu){
-	if (new_mtu < 0 || new_mtu > ETH_MAX_MTU)
-		return -EINVAL;
-	ndev->mtu = new_mtu;
-	return 0;
-}
-#endif
-
 static const struct net_device_ops usbnet_netdev_ops = {
-#if LINUX_VERSION_IS_LESS(4,10,0)
-	.ndo_change_mtu = __change_mtu,
-#endif
 	.ndo_open		= usbnet_open,
 	.ndo_stop		= usbnet_stop,
 	.ndo_start_xmit		= usbnet_start_xmit,
 	.ndo_tx_timeout		= usbnet_tx_timeout,
-	.ndo_set_rx_mode	= usbnet_set_rx_mode,
 	.ndo_change_mtu		= usbnet_change_mtu,
 	.ndo_set_mac_address 	= eth_mac_addr,
 	.ndo_validate_addr	= eth_validate_addr,
@@ -1675,14 +1512,13 @@ usbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 	dev->driver_name = name;
 	dev->msg_enable = netif_msg_init (msg_level, NETIF_MSG_DRV
 				| NETIF_MSG_PROBE | NETIF_MSG_LINK);
-	init_waitqueue_head(&dev->wait);
 	skb_queue_head_init (&dev->rxq);
 	skb_queue_head_init (&dev->txq);
 	skb_queue_head_init (&dev->done);
 	skb_queue_head_init(&dev->rxq_pause);
 	dev->bh.func = usbnet_bh;
 	dev->bh.data = (unsigned long) dev;
-	INIT_WORK (&dev->kevent, usbnet_deferred_kevent);
+	INIT_WORK (&dev->kevent, kevent);
 	init_usb_anchor(&dev->deferred);
 	dev->delay.function = usbnet_bh;
 	dev->delay.data = (unsigned long) dev;
@@ -1699,14 +1535,14 @@ usbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 	 * bind() should set rx_urb_size in that case.
 	 */
 	dev->hard_mtu = net->mtu + net->hard_header_len;
-#if LINUX_VERSION_IS_GEQ(4,10,0)
-	net->min_mtu = 0;
-#endif
-#if LINUX_VERSION_IS_GEQ(4,10,0)
-	net->max_mtu = ETH_MAX_MTU;
+#if 0
+// dma_supported() is deeply broken on almost all architectures
+	// possible with some EHCI controllers
+	if (dma_supported (&udev->dev, DMA_BIT_MASK(64)))
+		net->features |= NETIF_F_HIGHDMA;
 #endif
 
-	net->netdev_ops = &usbnet_netdev_ops;
+	netdev_attach_ops(net, &usbnet_netdev_ops);
 	net->watchdog_timeo = TX_TIMEOUT_JIFFIES;
 	net->ethtool_ops = &usbnet_ethtool_ops;
 
@@ -1760,30 +1596,14 @@ usbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 		dev->rx_urb_size = dev->hard_mtu;
 	dev->maxpacket = usb_maxpacket (dev->udev, dev->out, 1);
 
-	/* let userspace know we have a random address */
-	if (ether_addr_equal(net->dev_addr, node_id))
-		net->addr_assign_type = NET_ADDR_RANDOM;
-
 	if ((dev->driver_info->flags & FLAG_WLAN) != 0)
 		SET_NETDEV_DEVTYPE(net, &wlan_type);
 	if ((dev->driver_info->flags & FLAG_WWAN) != 0)
 		SET_NETDEV_DEVTYPE(net, &wwan_type);
 
-	/* initialize max rx_qlen and tx_qlen */
-	usbnet_update_max_qlen(dev);
-
-	if (dev->can_dma_sg && !(info->flags & FLAG_SEND_ZLP) &&
-		!(info->flags & FLAG_MULTI_PACKET)) {
-		dev->padding_pkt = kzalloc(1, GFP_KERNEL);
-		if (!dev->padding_pkt) {
-			status = -ENOMEM;
-			goto out4;
-		}
-	}
-
 	status = register_netdev (net);
 	if (status)
-		goto out5;
+		goto out4;
 	netif_info(dev, probe, dev->net,
 		   "register '%s' at usb-%s-%s, %s, %pM\n",
 		   udev->dev.driver->name,
@@ -1801,21 +1621,12 @@ usbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 
 	return 0;
 
-out5:
-	kfree(dev->padding_pkt);
 out4:
 	usb_free_urb(dev->interrupt);
 out3:
 	if (info->unbind)
 		info->unbind (dev, udev);
 out1:
-	/* subdrivers must undo all they did in bind() if they
-	 * fail it, but we may fail later and a deferred kevent
-	 * may trigger an error resubmitting itself and, worse,
-	 * schedule a timer. So we kill it all just in case.
-	 */
-	cancel_work_sync(&dev->kevent);
-	del_timer_sync(&dev->delay);
 	free_netdev(net);
 out:
 	return status;
@@ -1880,13 +1691,10 @@ int usbnet_resume (struct usb_interface *intf)
 			retval = usb_submit_urb(res, GFP_ATOMIC);
 			if (retval < 0) {
 				dev_kfree_skb_any(skb);
-#if LINUX_VERSION_IS_GEQ(3,35,0)
-				kfree(res->sg);
-#endif
 				usb_free_urb(res);
 				usb_autopm_put_interface_async(dev->intf);
 			} else {
-				netif_trans_update(dev->net);
+				dev->net->trans_start = jiffies;
 				__skb_queue_tail(&dev->txq, skb);
 			}
 		}
@@ -1896,10 +1704,9 @@ int usbnet_resume (struct usb_interface *intf)
 		spin_unlock_irq(&dev->txq.lock);
 
 		if (test_bit(EVENT_DEV_OPEN, &dev->flags)) {
-			/* handle remote wakeup ASAP
-			 * we cannot race against stop
-			 */
-			if (netif_device_present(dev->net) &&
+			/* handle remote wakeup ASAP */
+			if (!dev->wait &&
+				netif_device_present(dev->net) &&
 				!timer_pending(&dev->delay) &&
 				!test_bit(EVENT_RX_HALT, &dev->flags))
 					rx_alloc_submit(dev, GFP_NOIO);
@@ -1967,7 +1774,7 @@ static int __usbnet_read_cmd(struct usbnet *dev, u8 cmd, u8 reqtype,
 		   " value=0x%04x index=0x%04x size=%d\n",
 		   cmd, reqtype, value, index, size);
 
-	if (size) {
+	if (data) {
 		buf = kmalloc(size, GFP_KERNEL);
 		if (!buf)
 			goto out;
@@ -1976,13 +1783,8 @@ static int __usbnet_read_cmd(struct usbnet *dev, u8 cmd, u8 reqtype,
 	err = usb_control_msg(dev->udev, usb_rcvctrlpipe(dev->udev, 0),
 			      cmd, reqtype, value, index, buf, size,
 			      USB_CTRL_GET_TIMEOUT);
-	if (err > 0 && err <= size) {
-        if (data)
-            memcpy(data, buf, err);
-        else
-            netdev_dbg(dev->net,
-                "Huh? Data requested but thrown away.\n");
-    }
+	if (err > 0 && err <= size)
+		memcpy(data, buf, err);
 	kfree(buf);
 out:
 	return err;
@@ -2003,13 +1805,7 @@ static int __usbnet_write_cmd(struct usbnet *dev, u8 cmd, u8 reqtype,
 		buf = kmemdup(data, size, GFP_KERNEL);
 		if (!buf)
 			goto out;
-	} else {
-        if (size) {
-            WARN_ON_ONCE(1);
-            err = -EINVAL;
-            goto out;
-        }
-    }
+	}
 
 	err = usb_control_msg(dev->udev, usb_sndctrlpipe(dev->udev, 0),
 			      cmd, reqtype, value, index, buf, size,
@@ -2111,8 +1907,11 @@ int usbnet_write_cmd_async(struct usbnet *dev, u8 cmd, u8 reqtype,
 		   cmd, reqtype, value, index, size);
 
 	urb = usb_alloc_urb(0, GFP_ATOMIC);
-	if (!urb)
+	if (!urb) {
+		netdev_err(dev->net, "Error allocating URB in"
+			   " %s!\n", __func__);
 		goto fail;
+	}
 
 	if (data) {
 		buf = kmemdup(data, size, GFP_ATOMIC);
