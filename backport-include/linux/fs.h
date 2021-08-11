@@ -44,7 +44,7 @@ static inline struct inode *file_inode(struct file *f)
 #endif /* replace_fops */
 
 #if (LINUX_VERSION_IS_LESS(4,5,0) && \
-     LINUX_VERSION_IS_GEQ(3,2,0))
+     LINUX_VERSION_IS_GEQ(3,1,0))
 #define no_seek_end_llseek LINUX_BACKPORT(no_seek_end_llseek)
 extern loff_t no_seek_end_llseek(struct file *, loff_t, int);
 #endif /* < 4.5 && >= 3.2 */

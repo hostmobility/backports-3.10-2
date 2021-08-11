@@ -14,6 +14,6 @@
 #undef pr_fmt
 #undef backport_undef_pr_fmt
 #endif
-#endif /* LINUX_VERSION_IS_GEQ(3,2,0) */
+#endif /* LINUX_VERSION_IS_GEQ(3,1,0) */
 
 #endif	/* _COMPAT_LINUX_EXPORT_H */

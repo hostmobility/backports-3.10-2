@@ -176,7 +176,7 @@ enum pkt_hash_types {
 static inline void
 skb_set_hash(struct sk_buff *skb, __u32 hash, enum pkt_hash_types type)
 {
-#if LINUX_VERSION_IS_GEQ(3,2,0) /* 4031ae6edb */
+#if LINUX_VERSION_IS_GEQ(3,1,0) /* 4031ae6edb */
 	skb->l4_rxhash = (type == PKT_HASH_TYPE_L4);
 #endif
 #if LINUX_VERSION_IS_GEQ(3,4,0) /* bdeab99191 */

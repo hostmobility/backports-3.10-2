@@ -40,7 +40,7 @@ int led_set_brightness_sync(struct led_classdev *led_cdev,
 EXPORT_SYMBOL_GPL(led_set_brightness_sync);
 #endif /* >= 3.19 */
 
-#if LINUX_VERSION_IS_GEQ(3,2,0)
+#if LINUX_VERSION_IS_GEQ(3,1,0)
 /**
  * no_seek_end_llseek - llseek implementation for fixed-sized devices
  * @file:	file structure to seek on

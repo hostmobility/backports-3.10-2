@@ -55,7 +55,7 @@ void __iomem *devm_ioremap_resource(struct device *dev, struct resource *res);
 #endif
 
 #if LINUX_VERSION_IS_LESS(3,5,0) && \
-    LINUX_VERSION_IS_GEQ(3,2,0)
+    LINUX_VERSION_IS_GEQ(3,1,0)
 #define devres_release LINUX_BACKPORT(devres_release)
 extern int devres_release(struct device *dev, dr_release_t release,
 			  dr_match_t match, void *match_data);

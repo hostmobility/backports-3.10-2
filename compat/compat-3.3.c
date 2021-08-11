@@ -28,7 +28,7 @@ static void __copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
 #if LINUX_VERSION_IS_GEQ(3,1,0)
 	new->ooo_okay		= old->ooo_okay;
 #endif
-#if LINUX_VERSION_IS_GEQ(3,2,0)
+#if LINUX_VERSION_IS_GEQ(3,1,0)
 	new->l4_rxhash		= old->l4_rxhash;
 #endif
 #ifdef CONFIG_XFRM
@@ -145,7 +145,7 @@ struct sk_buff *__pskb_copy(struct sk_buff *skb, int headroom, gfp_t gfp_mask)
 #endif
 		for (i = 0; i < skb_shinfo(skb)->nr_frags; i++) {
 			skb_shinfo(n)->frags[i] = skb_shinfo(skb)->frags[i];
-#if LINUX_VERSION_IS_GEQ(3,2,0)
+#if LINUX_VERSION_IS_GEQ(3,1,0)
 			skb_frag_ref(skb, i);
 #else
 			get_page(skb_shinfo(skb)->frags[i].page);

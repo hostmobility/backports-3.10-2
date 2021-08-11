@@ -87,7 +87,7 @@ static inline struct clk *clk_get_parent(struct clk *clk)
 #endif /* #if LINUX_VERSION_IS_LESS(3,0,0) */
 
 #if LINUX_VERSION_IS_LESS(3,3,0) && \
-    LINUX_VERSION_IS_GEQ(3,2,0)
+    LINUX_VERSION_IS_GEQ(3,1,0)
 #define clk_prepare_enable LINUX_BACKPORT(clk_prepare_enable)
 /* clk_prepare_enable helps cases using clk_enable in non-atomic context. */
 static inline int clk_prepare_enable(struct clk *clk)
