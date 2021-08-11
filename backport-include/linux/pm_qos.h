@@ -3,7 +3,7 @@
 
 #include <linux/version.h>
 
-#if LINUX_VERSION_IS_GEQ(3,1,0)
+#if LINUX_VERSION_IS_GEQ(3,2,0)
 #include_next <linux/pm_qos.h>
 #else
 #include <linux/pm_qos_params.h>
