@@ -2,7 +2,7 @@
 #define __BACKPORT_LINUX_RCUPDATE_H
 #include_next <linux/rcupdate.h>
 
-/* 
+/*
  * This adds a nested function everywhere kfree_rcu() was called. This
  * function frees the memory and is given as a function to call_rcu().
  * The rcu callback could happen every time also after the module was
@@ -39,13 +39,6 @@
 
 #ifndef rcu_dereference_raw
 #define rcu_dereference_raw(p)	rcu_dereference(p)
-#endif
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,34)
-static inline int rcu_read_lock_held(void)
-{
-	return 1;
-}
 #endif
 
 #endif /* __BACKPORT_LINUX_RCUPDATE_H */

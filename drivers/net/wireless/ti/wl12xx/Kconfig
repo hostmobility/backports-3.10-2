@@ -1,4 +1,5 @@
 config WL12XX
+	depends on !KERNEL_3_2
        tristate "TI wl12xx support"
        depends on m
 	depends on MAC80211

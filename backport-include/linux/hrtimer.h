@@ -1,11 +1,17 @@
-#ifndef __BACKPORT_LINUX_HRTIMER_H
-#define __BACKPORT_LINUX_HRTIMER_H
-#include_next <linux/hrtimer.h>
+#ifndef _BP_HRTIMER_H
+#define _BP_HRTIMER_H
 #include <linux/version.h>
+#include_next <linux/hrtimer.h>
+#include <linux/interrupt.h>
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,5,0)
-#define ktime_get_monotonic_offset LINUX_BACKPORT(ktime_get_monotonic_offset)
-extern ktime_t ktime_get_monotonic_offset(void);
+#if LINUX_VERSION_IS_LESS(4,10,0)
+static inline void backport_hrtimer_start(struct hrtimer *timer, s64 time,
+					  const enum hrtimer_mode mode)
+{
+	ktime_t _time = { .tv64 = time };
+	hrtimer_start(timer, _time, mode);
+}
+#define hrtimer_start LINUX_BACKPORT(hrtimer_start)
 #endif
 
-#endif /* __BACKPORT_LINUX_HRTIMER_H */
+#endif /* _BP_HRTIMER_H */

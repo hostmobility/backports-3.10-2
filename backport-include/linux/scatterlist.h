@@ -1,49 +1,13 @@
 #ifndef __BACKPORT_SCATTERLIST_H
 #define __BACKPORT_SCATTERLIST_H
 #include_next <linux/scatterlist.h>
-#include <linux/version.h>
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25)
-struct sg_table {
-	struct scatterlist *sgl;        /* the list */
-	unsigned int nents;             /* number of mapped entries */
-	unsigned int orig_nents;        /* original size of list */
-};
-
-#define sg_alloc_fn LINUX_BACKPORT(sg_alloc_fn)
-typedef struct scatterlist *(sg_alloc_fn)(unsigned int, gfp_t);
-
-#define sg_free_fn LINUX_BACKPORT(sg_free_fn)
-typedef void (sg_free_fn)(struct scatterlist *, unsigned int);
-
-#define __sg_free_table LINUX_BACKPORT(__sg_free_table)
-void __sg_free_table(struct sg_table *table, unsigned int max_ents,
-		     sg_free_fn *free_fn);
-#define sg_free_table LINUX_BACKPORT(sg_free_table)
-void sg_free_table(struct sg_table *);
-#define __sg_alloc_table LINUX_BACKPORT(__sg_alloc_table)
-int __sg_alloc_table(struct sg_table *table, unsigned int nents,
-		     unsigned int max_ents, gfp_t gfp_mask,
-		     sg_alloc_fn *alloc_fn);
-#define sg_alloc_table LINUX_BACKPORT(sg_alloc_table)
-int sg_alloc_table(struct sg_table *table, unsigned int nents, gfp_t gfp_mask);
-
-#define SG_MAX_SINGLE_ALLOC            (PAGE_SIZE / sizeof(struct scatterlist))
+#if LINUX_VERSION_IS_LESS(3,7,0)
+int sg_nents(struct scatterlist *sg);
 #endif
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(3,6,0))
-/* backports efc42bc9 */
-#define sg_alloc_table_from_pages LINUX_BACKPORT(sg_alloc_table_from_pages)
-int sg_alloc_table_from_pages(struct sg_table *sgt,
-			      struct page **pages, unsigned int n_pages,
-			      unsigned long offset, unsigned long size,
-			      gfp_t gfp_mask);
-#endif /* < 3.6 */
+#if LINUX_VERSION_IS_LESS(3, 9, 0)
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,9,0)
-
-/* Lets expect distributions might backport this */
-#ifndef for_each_sg_page
 /*
  * sg page iterator
  *
@@ -54,59 +18,88 @@ int sg_alloc_table_from_pages(struct sg_table *sgt,
  * or a terminating sg (sg_last(sg) == true) was reached.
  */
 struct sg_page_iter {
-	struct page		*page;		/* current page */
-	struct scatterlist	*sg;		/* sg holding the page */
-	unsigned int		sg_pgoffset;	/* page offset within the sg */
+	struct page             *page;          /* current page */
+	struct scatterlist      *sg;            /* sg holding the page */
+	unsigned int            sg_pgoffset;    /* page offset within the sg */
 
 	/* these are internal states, keep away */
-	unsigned int		__nents;	/* remaining sg entries */
-	int			__pg_advance;	/* nr pages to advance at the
+	unsigned int            __nents;        /* remaining sg entries */
+	int                     __pg_advance;   /* nr pages to advance at the
 						 * next step */
 };
 
-#define __sg_page_iter_next LINUX_BACKPORT(__sg_page_iter_next)
-bool __sg_page_iter_next(struct sg_page_iter *piter);
-#define __sg_page_iter_start LINUX_BACKPORT(__sg_page_iter_start)
-void __sg_page_iter_start(struct sg_page_iter *piter,
-			  struct scatterlist *sglist, unsigned int nents,
-			  unsigned long pgoffset);
+struct backport_sg_mapping_iter {
+	/* the following three fields can be accessed directly */
+	struct page		*page;		/* currently mapped page */
+	void			*addr;		/* pointer to the mapped area */
+	size_t			length;		/* length of the mapped area */
+	size_t			consumed;	/* number of consumed bytes */
+	struct sg_page_iter	piter;		/* page iterator */
 
-/**
- * for_each_sg_page - iterate over the pages of the given sg list
- * @sglist:	sglist to iterate over
- * @piter:	page iterator to hold current page, sg, sg_pgoffset
- * @nents:	maximum number of sg entries to iterate over
- * @pgoffset:	starting page offset
- */
-#define for_each_sg_page(sglist, piter, nents, pgoffset)		   \
-	for (__sg_page_iter_start((piter), (sglist), (nents), (pgoffset)); \
-	     __sg_page_iter_next(piter);)
+	/* these are internal states, keep away */
+	unsigned int		__offset;	/* offset within page */
+	unsigned int		__remaining;	/* remaining bytes on page */
+	unsigned int		__flags;
+};
+#define sg_mapping_iter LINUX_BACKPORT(sg_mapping_iter)
 
-#endif /* for_each_sg_page assumption */
-#endif /* version < 3.9 */
-
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0))
-
-#define sg_page_iter_page LINUX_BACKPORT(sg_page_iter_page)
 /**
  * sg_page_iter_page - get the current page held by the page iterator
- * @piter:     page iterator holding the page
+ * @piter:	page iterator holding the page
  */
 static inline struct page *sg_page_iter_page(struct sg_page_iter *piter)
 {
 	return nth_page(sg_page(piter->sg), piter->sg_pgoffset);
 }
 
-#define sg_page_iter_dma_address LINUX_BACKPORT(sg_page_iter_dma_address)
+bool __sg_page_iter_next(struct sg_page_iter *piter);
+void __sg_page_iter_start(struct sg_page_iter *piter,
+			  struct scatterlist *sglist, unsigned int nents,
+			  unsigned long pgoffset);
+
+void backport_sg_miter_start(struct sg_mapping_iter *miter, struct scatterlist *sgl,
+		    unsigned int nents, unsigned int flags);
+bool backport_sg_miter_next(struct sg_mapping_iter *miter);
+void backport_sg_miter_stop(struct sg_mapping_iter *miter);
+#define sg_miter_start LINUX_BACKPORT(sg_miter_start)
+#define sg_miter_next LINUX_BACKPORT(sg_miter_next)
+#define sg_miter_stop LINUX_BACKPORT(sg_miter_stop)
+
 /**
- * sg_page_iter_dma_address - get the dma address of the current page held by
- * the page iterator.
- * @piter:     page iterator holding the page
+ * for_each_sg_page - iterate over the pages of the given sg list
+ * @sglist:    sglist to iterate over
+ * @piter:     page iterator to hold current page, sg, sg_pgoffset
+ * @nents:     maximum number of sg entries to iterate over
+ * @pgoffset:  starting page offset
  */
-static inline dma_addr_t sg_page_iter_dma_address(struct sg_page_iter *piter)
+#define for_each_sg_page(sglist, piter, nents, pgoffset)		\
+	for (__sg_page_iter_start((piter), (sglist), (nents), (pgoffset)); \
+	     __sg_page_iter_next(piter);)
+
+#endif /* LINUX_VERSION_IS_LESS(3, 9, 0) */
+
+#if LINUX_VERSION_IS_LESS(3, 11, 0)
+size_t sg_copy_buffer(struct scatterlist *sgl, unsigned int nents, void *buf,
+		      size_t buflen, off_t skip, bool to_buffer);
+
+#define sg_pcopy_to_buffer LINUX_BACKPORT(sg_pcopy_to_buffer)
+
+static inline
+size_t sg_pcopy_to_buffer(struct scatterlist *sgl, unsigned int nents,
+			  void *buf, size_t buflen, off_t skip)
 {
-	return sg_dma_address(piter->sg) + (piter->sg_pgoffset << PAGE_SHIFT);
+	return sg_copy_buffer(sgl, nents, buf, buflen, skip, true);
 }
-#endif /* version < 3.10 */
+
+#define sg_pcopy_from_buffer LINUX_BACKPORT(sg_pcopy_from_buffer)
+
+static inline
+size_t sg_pcopy_from_buffer(struct scatterlist *sgl, unsigned int nents,
+			    void *buf, size_t buflen, off_t skip)
+{
+	return sg_copy_buffer(sgl, nents, buf, buflen, skip, false);
+}
+
+#endif /* LINUX_VERSION_IS_LESS(3, 11, 0) */
 
 #endif /* __BACKPORT_SCATTERLIST_H */

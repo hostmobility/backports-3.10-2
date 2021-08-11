@@ -3,8 +3,8 @@
 #include_next <linux/regmap.h>
 #include <linux/version.h>
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,5,0) && \
-    LINUX_VERSION_CODE >= KERNEL_VERSION(3,2,0)
+#if LINUX_VERSION_IS_LESS(3,5,0) && \
+    LINUX_VERSION_IS_GEQ(3,2,0)
 #define dev_get_regmap LINUX_BACKPORT(dev_get_regmap)
 static inline
 struct regmap *dev_get_regmap(struct device *dev, const char *name)
@@ -13,8 +13,8 @@ struct regmap *dev_get_regmap(struct device *dev, const char *name)
 }
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,4,0) && \
-    LINUX_VERSION_CODE >= KERNEL_VERSION(3,2,0)
+#if LINUX_VERSION_IS_LESS(3,4,0) && \
+    LINUX_VERSION_IS_GEQ(3,2,0)
 #if defined(CONFIG_REGMAP)
 #define devm_regmap_init LINUX_BACKPORT(devm_regmap_init)
 struct regmap *devm_regmap_init(struct device *dev,
@@ -25,11 +25,6 @@ struct regmap *devm_regmap_init(struct device *dev,
 struct regmap *devm_regmap_init_i2c(struct i2c_client *i2c,
 				    const struct regmap_config *config);
 #endif /* defined(CONFIG_REGMAP_I2C) */
-#if defined(CONFIG_REGMAP_SPI)
-#define devm_regmap_init_spi LINUX_BACKPORT(devm_regmap_init_spi)
-struct regmap *devm_regmap_init_spi(struct spi_device *dev,
-				    const struct regmap_config *config);
-#endif /* defined(CONFIG_REGMAP_SPI) */
 
 /*
  * We can't backport these unless we try to backport

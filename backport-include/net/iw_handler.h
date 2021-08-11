@@ -1,27 +1,40 @@
-#ifndef __BACKPORT_NET_IW_HANDLER_H
-#define __BACKPORT_NET_IW_HANDLER_H
+#ifndef __BACKPORT_IW_HANDLER_H
+#define __BACKPORT_IW_HANDLER_H
 #include_next <net/iw_handler.h>
-#include <linux/version.h>
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,32)
-#define wireless_send_event(a, b, c, d) wireless_send_event(a, b, c, (char * ) d)
-#endif
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,27)
-#define iwe_stream_add_value(info, event, value, ends, iwe, event_len) iwe_stream_add_value(event, value, ends, iwe, event_len)
-#define iwe_stream_add_point(info, stream, ends, iwe, extra) iwe_stream_add_point(stream, ends, iwe, extra)
-#define iwe_stream_add_event(info, stream, ends, iwe, event_len) iwe_stream_add_event(stream, ends, iwe, event_len)
-
-#define IW_REQUEST_FLAG_COMPAT	0x0001	/* Compat ioctl call */
-
-static inline int iwe_stream_lcp_len(struct iw_request_info *info)
+#if LINUX_VERSION_IS_LESS(4,1,0)
+static inline char *
+iwe_stream_add_event_check(struct iw_request_info *info, char *stream,
+			   char *ends, struct iw_event *iwe, int event_len)
 {
-#ifdef CONFIG_COMPAT
-	if (info->flags & IW_REQUEST_FLAG_COMPAT)
-		return IW_EV_COMPAT_LCP_LEN;
-#endif
-	return IW_EV_LCP_LEN;
-}
-#endif
+	char *res = iwe_stream_add_event(info, stream, ends, iwe, event_len);
 
-#endif /* __BACKPORT_NET_IW_HANDLER_H */
+	if (res == stream)
+		return ERR_PTR(-E2BIG);
+	return res;
+}
+
+static inline char *
+iwe_stream_add_point_check(struct iw_request_info *info, char *stream,
+			   char *ends, struct iw_event *iwe, char *extra)
+{
+	char *res = iwe_stream_add_point(info, stream, ends, iwe, extra);
+
+	if (res == stream)
+		return ERR_PTR(-E2BIG);
+	return res;
+}
+#endif /* LINUX_VERSION_IS_LESS(4,1,0) */
+
+/* this was added in v3.2.79, v3.18.30, v4.1.21, v4.4.6 and 4.5 */
+#if !(LINUX_VERSION_IS_GEQ(4,4,6) || \
+      (LINUX_VERSION_IS_GEQ(4,1,21) && \
+       LINUX_VERSION_IS_LESS(4,2,0)) || \
+      (LINUX_VERSION_IS_GEQ(3,18,30) && \
+       LINUX_VERSION_IS_LESS(3,19,0)) || \
+      (LINUX_VERSION_IS_GEQ(3,2,79) && \
+       LINUX_VERSION_IS_LESS(3,3,0)))
+#define wireless_nlevent_flush LINUX_BACKPORT(wireless_nlevent_flush)
+static inline void wireless_nlevent_flush(void) {}
+#endif
+#endif /* __BACKPORT_IW_HANDLER_H */

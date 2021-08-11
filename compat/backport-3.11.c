@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013  Hauke Mehrtens <hauke@hauke-m.de>
+ * Copyright (c) 2016 Intel Deutschland GmbH
  *
  * Backport functionality introduced in Linux 3.11.
  *
@@ -8,85 +8,117 @@
  * published by the Free Software Foundation.
  */
 
-#include <linux/export.h>
+#include <linux/module.h>
+#include <linux/scatterlist.h>
 
-#ifdef CONFIG_MTRR
+static bool sg_miter_get_next_page(struct sg_mapping_iter *miter)
+{
+	if (!miter->__remaining) {
+		struct scatterlist *sg;
+		unsigned long pgoffset;
 
-#include <asm/mtrr.h>
-#include <asm/cpufeature.h>
-#include <linux/io.h>
-#include <linux/printk.h>
+		if (!__sg_page_iter_next(&miter->piter))
+			return false;
 
-/* arch_phys_wc_add returns an MTRR register index plus this offset. */
-#define MTRR_TO_PHYS_WC_OFFSET 1000
+		sg = miter->piter.sg;
+		pgoffset = miter->piter.sg_pgoffset;
+
+		miter->__offset = pgoffset ? 0 : sg->offset;
+		miter->__remaining = sg->offset + sg->length -
+				(pgoffset << PAGE_SHIFT) - miter->__offset;
+		miter->__remaining = min_t(unsigned long, miter->__remaining,
+					   PAGE_SIZE - miter->__offset);
+	}
+
+	return true;
+}
 
 /**
- * arch_phys_wc_add - add a WC MTRR and handle errors if PAT is unavailable
- * @base: Physical base address
- * @size: Size of region
+ * sg_miter_skip - reposition mapping iterator
+ * @miter: sg mapping iter to be skipped
+ * @offset: number of bytes to plus the current location
  *
- * If PAT is available, this does nothing.  If PAT is unavailable, it
- * attempts to add a WC MTRR covering size bytes starting at base and
- * logs an error if this fails.
+ * Description:
+ *   Sets the offset of @miter to its current location plus @offset bytes.
+ *   If mapping iterator @miter has been proceeded by sg_miter_next(), this
+ *   stops @miter.
  *
- * Drivers must store the return value to pass to mtrr_del_wc_if_needed,
- * but drivers should not try to interpret that return value.
+ * Context:
+ *   Don't care if @miter is stopped, or not proceeded yet.
+ *   Otherwise, preemption disabled if the SG_MITER_ATOMIC is set.
+ *
+ * Returns:
+ *   true if @miter contains the valid mapping.  false if end of sg
+ *   list is reached.
  */
-int arch_phys_wc_add(unsigned long base, unsigned long size)
+static bool sg_miter_skip(struct sg_mapping_iter *miter, off_t offset)
 {
-	int ret;
+	sg_miter_stop(miter);
 
-#if defined(CONFIG_X86_PAT)
-	if (cpu_has_pat)
-		return 0;
-#endif
+	while (offset) {
+		off_t consumed;
 
-	ret = mtrr_add(base, size, MTRR_TYPE_WRCOMB, true);
-	if (ret < 0) {
-		pr_warn("Failed to add WC MTRR for [%p-%p]; performance may suffer.",
-			(void *)base, (void *)(base + size - 1));
-		return ret;
+		if (!sg_miter_get_next_page(miter))
+			return false;
+
+		consumed = min_t(off_t, offset, miter->__remaining);
+		miter->__offset += consumed;
+		miter->__remaining -= consumed;
+		offset -= consumed;
 	}
-	return ret + MTRR_TO_PHYS_WC_OFFSET;
-}
-EXPORT_SYMBOL_GPL(arch_phys_wc_add);
 
-/*
- * arch_phys_wc_del - undoes arch_phys_wc_add
- * @handle: Return value from arch_phys_wc_add
- *
- * This cleans up after mtrr_add_wc_if_needed.
- *
- * The API guarantees that mtrr_del_wc_if_needed(error code) and
- * mtrr_del_wc_if_needed(0) do nothing.
- */
-void arch_phys_wc_del(int handle)
-{
-	if (handle >= 1) {
-		WARN_ON(handle < MTRR_TO_PHYS_WC_OFFSET);
-		mtrr_del(handle - MTRR_TO_PHYS_WC_OFFSET, 0, 0);
-	}
+	return true;
 }
-EXPORT_SYMBOL_GPL(arch_phys_wc_del);
 
-/*
- * phys_wc_to_mtrr_index - translates arch_phys_wc_add's return value
- * @handle: Return value from arch_phys_wc_add
+/**
+ * sg_copy_buffer - Copy data between a linear buffer and an SG list
+ * @sgl:		 The SG list
+ * @nents:		 Number of SG entries
+ * @buf:		 Where to copy from
+ * @buflen:		 The number of bytes to copy
+ * @skip:		 Number of bytes to skip before copying
+ * @to_buffer:		 transfer direction (true == from an sg list to a
+ *			 buffer, false == from a buffer to an sg list
  *
- * This will turn the return value from arch_phys_wc_add into an mtrr
- * index suitable for debugging.
+ * Returns the number of copied bytes.
  *
- * Note: There is no legitimate use for this function, except possibly
- * in printk line.  Alas there is an illegitimate use in some ancient
- * drm ioctls.
- */
-int phys_wc_to_mtrr_index(int handle)
+ **/
+size_t sg_copy_buffer(struct scatterlist *sgl, unsigned int nents, void *buf,
+		      size_t buflen, off_t skip, bool to_buffer)
 {
-	if (handle < MTRR_TO_PHYS_WC_OFFSET)
-		return -1;
+	unsigned int offset = 0;
+	struct sg_mapping_iter miter;
+	unsigned long flags;
+	unsigned int sg_flags = SG_MITER_ATOMIC;
+
+	if (to_buffer)
+		sg_flags |= SG_MITER_FROM_SG;
 	else
-		return handle - MTRR_TO_PHYS_WC_OFFSET;
-}
-EXPORT_SYMBOL_GPL(phys_wc_to_mtrr_index);
+		sg_flags |= SG_MITER_TO_SG;
 
-#endif /* CONFIG_MTRR */
+	sg_miter_start(&miter, sgl, nents, sg_flags);
+
+	if (!sg_miter_skip(&miter, skip))
+		return false;
+
+	local_irq_save(flags);
+
+	while (sg_miter_next(&miter) && offset < buflen) {
+		unsigned int len;
+
+		len = min(miter.length, buflen - offset);
+
+		if (to_buffer)
+			memcpy(buf + offset, miter.addr, len);
+		else
+			memcpy(miter.addr, buf + offset, len);
+
+		offset += len;
+	}
+
+	sg_miter_stop(&miter);
+
+	local_irq_restore(flags);
+	return offset;
+}
+EXPORT_SYMBOL_GPL(sg_copy_buffer);

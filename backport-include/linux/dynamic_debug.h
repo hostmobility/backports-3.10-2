@@ -1,11 +1,9 @@
 #ifndef __BACKPORT_LINUX_DYNAMIC_DEBUG_H
 #define __BACKPORT_LINUX_DYNAMIC_DEBUG_H
 #include <linux/version.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,30)
 #include_next <linux/dynamic_debug.h>
-#endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,2,0)
+#if LINUX_VERSION_IS_LESS(3,2,0)
 /* backports 07613b0b */
 #if defined(CONFIG_DYNAMIC_DEBUG)
 #if (RHEL_RELEASE_CODE < RHEL_RELEASE_VERSION(6,4))
