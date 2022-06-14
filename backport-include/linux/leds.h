@@ -24,21 +24,37 @@
  *   Signed-off-by: Bryan Wu <bryan.wu@canonical.com>
  */
 #define led_set_brightness(_dev, _switch) led_brightness_set(_dev, _switch)
+#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(3,6,0) */
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,2,0)
+/*
+ * There is no LINUX_BACKPORT() guard here because we want it to point to
+ * the original function which is exported normally.
+ */
+#ifdef CONFIG_LEDS_TRIGGERS
+extern void led_trigger_remove(struct led_classdev *led_cdev);
+#else
+static inline void led_trigger_remove(struct led_classdev *led_cdev) {}
+#endif
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,37) && \
-    !defined(CPTCFG_BACKPORT_BUILD_LEDS)
-extern void led_blink_set(struct led_classdev *led_cdev,
-			  unsigned long *delay_on,
-			  unsigned long *delay_off);
-
-#define led_classdev_unregister compat_led_classdev_unregister
-extern void compat_led_classdev_unregister(struct led_classdev *led_cdev);
-
-#define led_brightness_set compat_led_brightness_set
-extern void compat_led_brightness_set(struct led_classdev *led_cdev,
-				      enum led_brightness brightness);
-#endif
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,4,0) && \
+    LINUX_VERSION_CODE >= KERNEL_VERSION(3,19,0)
+#define netif_tx_napi_add LINUX_BACKPORT(netif_tx_napi_add)
+/**
+ * led_set_brightness_sync - set LED brightness synchronously
+ * @led_cdev: the LED to set
+ * @brightness: the brightness to set it to
+ *
+ * Set an LED's brightness immediately. This function will block
+ * the caller for the time required for accessing device registers,
+ * and it can sleep.
+ *
+ * Returns: 0 on success or negative error value on failure
+ */
+extern int led_set_brightness_sync(struct led_classdev *led_cdev,
+				   enum led_brightness value);
+#endif /* < 4.4 && >= 3.19 */
 
 #include <backport/leds-disabled.h>
 

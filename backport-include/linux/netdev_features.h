@@ -8,17 +8,15 @@
 #include <linux/types.h>
 
 /* added via 9356b8fc */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,14)
 #define NETIF_F_HW_VLAN_CTAG_RX			NETIF_F_HW_VLAN_RX
 #define NETIF_F_HW_VLAN_CTAG_TX			NETIF_F_HW_VLAN_TX
-#endif
 
 /* added via d314774c */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,29)
 #define NETIF_F_HW_VLAN_CTAG_FILTER		NETIF_F_HW_VLAN_FILTER
-#endif
 
+/* c8f44aff made this u32 but later a861a8b2 changed it to u64 both on v3.3 */
 typedef u32 netdev_features_t;
+
 #else
 #include_next <linux/netdev_features.h>
 
@@ -37,6 +35,14 @@ typedef u32 netdev_features_t;
 
 #if !defined(NETIF_F_RXCSUM)
 #define NETIF_F_RXCSUM 0
+#endif
+
+#if !defined(NETIF_F_RXALL)
+#define NETIF_F_RXALL 0
+#endif
+
+#if !defined(NETIF_F_RXFCS)
+#define NETIF_F_RXFCS 0
 #endif
 
 #endif /* __BACKPORT_NETDEV_FEATURES_H */

@@ -209,7 +209,7 @@ static void cpia2_usb_complete(struct urb *urb)
 {
 	int i;
 	unsigned char *cdata;
-	static int frame_ready = false;
+	static bool frame_ready = false;
 	struct camera_data *cam = (struct camera_data *) urb->context;
 
 	if (urb->status!=0) {
@@ -890,8 +890,7 @@ static void cpia2_usb_disconnect(struct usb_interface *intf)
 		DBG("Wakeup waiting processes\n");
 		cam->curbuff->status = FRAME_READY;
 		cam->curbuff->length = 0;
-		if (waitqueue_active(&cam->wq_stream))
-			wake_up_interruptible(&cam->wq_stream);
+		wake_up_interruptible(&cam->wq_stream);
 	}
 
 	DBG("Releasing interface\n");

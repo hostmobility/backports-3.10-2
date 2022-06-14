@@ -37,7 +37,6 @@ int v4l2_device_register(struct device *dev, struct v4l2_device *v4l2_dev)
 
 	INIT_LIST_HEAD(&v4l2_dev->subdevs);
 	spin_lock_init(&v4l2_dev->lock);
-	mutex_init(&v4l2_dev->ioctl_lock);
 	v4l2_prio_init(&v4l2_dev->prio);
 	kref_init(&v4l2_dev->ref);
 	get_device(dev);
@@ -119,11 +118,24 @@ void v4l2_device_unregister(struct v4l2_device *v4l2_dev)
 		if (sd->flags & V4L2_SUBDEV_FL_IS_I2C) {
 			struct i2c_client *client = v4l2_get_subdevdata(sd);
 
-			/* We need to unregister the i2c client explicitly.
-			   We cannot rely on i2c_del_adapter to always
-			   unregister clients for us, since if the i2c bus
-			   is a platform bus, then it is never deleted. */
-			if (client)
+			/*
+			 * We need to unregister the i2c client
+			 * explicitly. We cannot rely on
+			 * i2c_del_adapter to always unregister
+			 * clients for us, since if the i2c bus is a
+			 * platform bus, then it is never deleted.
+			 *
+			 * Device tree or ACPI based devices must not
+			 * be unregistered as they have not been
+			 * registered by us, and would not be
+			 * re-created by just probing the V4L2 driver.
+			 */
+			if (client &&
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0)
+			    !client->dev.of_node && !client->dev.fwnode)
+#else
+			    !client->dev.of_node)
+#endif
 				i2c_unregister_device(client);
 			continue;
 		}
@@ -132,7 +144,11 @@ void v4l2_device_unregister(struct v4l2_device *v4l2_dev)
 		if (sd->flags & V4L2_SUBDEV_FL_IS_SPI) {
 			struct spi_device *spi = v4l2_get_subdevdata(sd);
 
-			if (spi)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0)
+			if (spi && !spi->dev.of_node && !spi->dev.fwnode)
+#else
+			if (spi && !spi->dev.of_node)
+#endif
 				spi_unregister_device(spi);
 			continue;
 		}
@@ -158,7 +174,17 @@ int v4l2_device_register_subdev(struct v4l2_device *v4l2_dev,
 	/* Warn if we apparently re-register a subdev */
 	WARN_ON(sd->v4l2_dev != NULL);
 
-	if (!try_module_get(sd->owner))
+	/*
+	 * The reason to acquire the module here is to avoid unloading
+	 * a module of sub-device which is registered to a media
+	 * device. To make it possible to unload modules for media
+	 * devices that also register sub-devices, do not
+	 * try_module_get() such sub-device owners.
+	 */
+	sd->owner_v4l2_dev = v4l2_dev->dev && v4l2_dev->dev->driver &&
+		sd->owner == v4l2_dev->dev->driver->owner;
+
+	if (!sd->owner_v4l2_dev && !try_module_get(sd->owner))
 		return -ENODEV;
 
 	sd->v4l2_dev = v4l2_dev;
@@ -192,7 +218,8 @@ error_unregister:
 	if (sd->internal_ops && sd->internal_ops->unregistered)
 		sd->internal_ops->unregistered(sd);
 error_module:
-	module_put(sd->owner);
+	if (!sd->owner_v4l2_dev)
+		module_put(sd->owner);
 	sd->v4l2_dev = NULL;
 	return err;
 }
@@ -237,8 +264,8 @@ int v4l2_device_register_subdev_nodes(struct v4l2_device *v4l2_dev)
 			goto clean_up;
 		}
 #if defined(CPTCFG_MEDIA_CONTROLLER)
-		sd->entity.info.v4l.major = VIDEO_MAJOR;
-		sd->entity.info.v4l.minor = vdev->minor;
+		sd->entity.info.dev.major = VIDEO_MAJOR;
+		sd->entity.info.dev.minor = vdev->minor;
 #endif
 		sd->devnode = vdev;
 	}
@@ -280,6 +307,7 @@ void v4l2_device_unregister_subdev(struct v4l2_subdev *sd)
 	}
 #endif
 	video_unregister_device(sd->devnode);
-	module_put(sd->owner);
+	if (!sd->owner_v4l2_dev)
+		module_put(sd->owner);
 }
 EXPORT_SYMBOL_GPL(v4l2_device_unregister_subdev);

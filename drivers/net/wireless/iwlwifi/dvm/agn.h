@@ -5,7 +5,7 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright(c) 2008 - 2013 Intel Corporation. All rights reserved.
+ * Copyright(c) 2008 - 2014 Intel Corporation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -30,7 +30,7 @@
  *
  * BSD LICENSE
  *
- * Copyright(c) 2005 - 2013 Intel Corporation. All rights reserved.
+ * Copyright(c) 2005 - 2014 Intel Corporation. All rights reserved.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -106,11 +106,10 @@ extern const struct iwl_dvm_cfg iwl_dvm_6030_cfg;
 #define STATUS_CHANNEL_SWITCH_PENDING 11
 #define STATUS_SCAN_COMPLETE	12
 #define STATUS_POWER_PMI	13
-#define STATUS_SCAN_ROC_EXPIRED 14
 
 struct iwl_ucode_capabilities;
 
-extern struct ieee80211_ops iwlagn_hw_ops;
+extern const struct ieee80211_ops iwlagn_hw_ops;
 
 static inline void iwl_set_calib_hdr(struct iwl_calib_hdr *hdr, u8 cmd)
 {
@@ -123,9 +122,8 @@ static inline void iwl_set_calib_hdr(struct iwl_calib_hdr *hdr, u8 cmd)
 void iwl_down(struct iwl_priv *priv);
 void iwl_cancel_deferred_work(struct iwl_priv *priv);
 void iwlagn_prepare_restart(struct iwl_priv *priv);
-int __must_check iwl_rx_dispatch(struct iwl_op_mode *op_mode,
-				 struct iwl_rx_cmd_buffer *rxb,
-				 struct iwl_device_cmd *cmd);
+void iwl_rx_dispatch(struct iwl_op_mode *op_mode, struct napi_struct *napi,
+		     struct iwl_rx_cmd_buffer *rxb);
 
 bool iwl_check_for_ct_kill(struct iwl_priv *priv);
 
@@ -217,11 +215,9 @@ int iwlagn_tx_agg_stop(struct iwl_priv *priv, struct ieee80211_vif *vif,
 		       struct ieee80211_sta *sta, u16 tid);
 int iwlagn_tx_agg_flush(struct iwl_priv *priv, struct ieee80211_vif *vif,
 			struct ieee80211_sta *sta, u16 tid);
-int iwlagn_rx_reply_compressed_ba(struct iwl_priv *priv,
-				   struct iwl_rx_cmd_buffer *rxb,
-				   struct iwl_device_cmd *cmd);
-int iwlagn_rx_reply_tx(struct iwl_priv *priv, struct iwl_rx_cmd_buffer *rxb,
-			       struct iwl_device_cmd *cmd);
+void iwlagn_rx_reply_compressed_ba(struct iwl_priv *priv,
+				   struct iwl_rx_cmd_buffer *rxb);
+void iwlagn_rx_reply_tx(struct iwl_priv *priv, struct iwl_rx_cmd_buffer *rxb);
 
 static inline u32 iwl_tx_status_to_mac80211(u32 status)
 {
@@ -250,7 +246,6 @@ u8 iwl_toggle_tx_ant(struct iwl_priv *priv, u8 ant_idx, u8 valid);
 
 /* scan */
 void iwlagn_post_scan(struct iwl_priv *priv);
-void iwlagn_disable_roc(struct iwl_priv *priv);
 int iwl_force_rf_reset(struct iwl_priv *priv, bool external);
 void iwl_init_scan_params(struct iwl_priv *priv);
 int iwl_scan_cancel(struct iwl_priv *priv);
@@ -264,10 +259,6 @@ int __must_check iwl_scan_initiate(struct iwl_priv *priv,
 				   struct ieee80211_vif *vif,
 				   enum iwl_scan_type scan_type,
 				   enum ieee80211_band band);
-
-void iwl_scan_roc_expired(struct iwl_priv *priv);
-void iwl_scan_offchannel_skb(struct iwl_priv *priv);
-void iwl_scan_offchannel_skb_status(struct iwl_priv *priv);
 
 /* For faster active scanning, scan will move to the next channel if fewer than
  * PLCP_QUIET_THRESH packets are heard on this channel within
@@ -283,9 +274,6 @@ void iwl_scan_offchannel_skb_status(struct iwl_priv *priv);
 
 /* bt coex */
 void iwlagn_send_advance_bt_config(struct iwl_priv *priv);
-int iwlagn_bt_coex_profile_notif(struct iwl_priv *priv,
-				  struct iwl_rx_cmd_buffer *rxb,
-				  struct iwl_device_cmd *cmd);
 void iwlagn_bt_rx_handler_setup(struct iwl_priv *priv);
 void iwlagn_bt_setup_deferred_work(struct iwl_priv *priv);
 void iwlagn_bt_cancel_deferred_work(struct iwl_priv *priv);
@@ -338,8 +326,7 @@ u8 iwl_prep_station(struct iwl_priv *priv, struct iwl_rxon_context *ctx,
 
 int iwl_send_lq_cmd(struct iwl_priv *priv, struct iwl_rxon_context *ctx,
 		    struct iwl_link_quality_cmd *lq, u8 flags, bool init);
-int iwl_add_sta_callback(struct iwl_priv *priv, struct iwl_rx_cmd_buffer *rxb,
-			       struct iwl_device_cmd *cmd);
+void iwl_add_sta_callback(struct iwl_priv *priv, struct iwl_rx_cmd_buffer *rxb);
 int iwl_sta_update_ht(struct iwl_priv *priv, struct iwl_rxon_context *ctx,
 		      struct ieee80211_sta *sta);
 
@@ -403,7 +390,7 @@ static inline __le32 iwl_hw_set_rate_n_flags(u8 rate, u32 flags)
 	return cpu_to_le32(flags|(u32)rate);
 }
 
-extern int iwl_alive_start(struct iwl_priv *priv);
+int iwl_alive_start(struct iwl_priv *priv);
 
 #ifdef CPTCFG_IWLWIFI_DEBUG
 void iwl_print_rx_config_cmd(struct iwl_priv *priv,
@@ -486,7 +473,7 @@ do {									\
 } while (0)
 #endif				/* CPTCFG_IWLWIFI_DEBUG */
 
-extern const char *iwl_dvm_cmd_strings[REPLY_MAX];
+extern const char *const iwl_dvm_cmd_strings[REPLY_MAX + 1];
 
 static inline const char *iwl_dvm_get_cmd_string(u8 cmd)
 {

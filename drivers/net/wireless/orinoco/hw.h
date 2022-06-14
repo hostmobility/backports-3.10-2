@@ -22,9 +22,6 @@
 
 /* Forward declarations */
 struct orinoco_private;
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,35))
-struct dev_addr_list;
-#endif
 
 int determine_fw_capabilities(struct orinoco_private *priv, char *fw_name,
 			      size_t fw_name_len, u32 *hw_ver);
@@ -41,8 +38,8 @@ int __orinoco_hw_set_wap(struct orinoco_private *priv);
 int __orinoco_hw_setup_wepkeys(struct orinoco_private *priv);
 int __orinoco_hw_setup_enc(struct orinoco_private *priv);
 int __orinoco_hw_set_tkip_key(struct orinoco_private *priv, int key_idx,
-			      int set_tx, u8 *key, u8 *rsc, size_t rsc_len,
-			      u8 *tsc, size_t tsc_len);
+			      int set_tx, const u8 *key, const u8 *rsc,
+			      size_t rsc_len, const u8 *tsc, size_t tsc_len);
 int orinoco_clear_tkip_key(struct orinoco_private *priv, int key_idx);
 int __orinoco_hw_set_multicast_list(struct orinoco_private *priv,
 				    struct net_device *dev,

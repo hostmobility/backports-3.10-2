@@ -31,7 +31,7 @@
 
 #include <media/lirc.h>
 #include <media/lirc_dev.h>
-#include <media/ir-rx51.h>
+#include <linux/platform_data/media/ir-rx51.h>
 
 #define LIRC_RX51_DRIVER_FEATURES (LIRC_CAN_SET_SEND_DUTY_CYCLE |	\
 				   LIRC_CAN_SET_SEND_CARRIER |		\
@@ -201,8 +201,7 @@ static int lirc_rx51_init_port(struct lirc_rx51 *lirc_rx51)
 
 	lirc_rx51->irq_num = omap_dm_timer_get_irq(lirc_rx51->pulse_timer);
 	retval = request_irq(lirc_rx51->irq_num, lirc_rx51_interrupt_handler,
-			     IRQF_DISABLED | IRQF_SHARED,
-			     "lirc_pulse_timer", lirc_rx51);
+			     IRQF_SHARED, "lirc_pulse_timer", lirc_rx51);
 	if (retval) {
 		dev_err(lirc_rx51->dev, ": Failed to request interrupt line\n");
 		goto err2;

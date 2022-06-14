@@ -32,6 +32,11 @@ usedefconfig:
 	@$(MAKE) -C kconf conf
 	@./kconf/conf --defconfig=defconfig Kconfig
 
+.PHONY: savedefconfig
+savedefconfig:
+	@$(MAKE) -C kconf conf
+	@./kconf/conf --savedefconfig=defconfig Kconfig
+
 defconfig-%::
 	@$(MAKE) -C kconf conf
 	@./kconf/conf --defconfig=defconfigs/$(@:defconfig-%=%) Kconfig
@@ -84,10 +89,9 @@ modules: backport-include/backport/autoconf.h
 
 .PHONY: install
 install: modules
-	@$(MAKE) -C $(KLIB_BUILD) M=$(BACKPORT_PWD)			\
+	@$(MAKE) -C $(KLIB_BUILD) M=$(BACKPORT_DIR)			\
 		INSTALL_MOD_DIR=$(KMODDIR) $(KMODPATH_ARG)		\
 		modules_install
-	@./scripts/backport_firmware_install.sh
 	@echo
 	@echo Your backported driver modules should be installed now.
 	@echo Reboot.
