@@ -8,12 +8,12 @@
  */
 #include <linux/uidgid.h>
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(3,4,0))
+#if LINUX_VERSION_IS_LESS(3,4,0)
 #define simple_open LINUX_BACKPORT(simple_open)
 extern int simple_open(struct inode *inode, struct file *file);
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,9,0)
+#if LINUX_VERSION_IS_LESS(3,9,0)
 /**
  * backport of:
  *
@@ -29,13 +29,24 @@ static inline struct inode *file_inode(struct file *f)
 }
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,35)
-#define noop_llseek LINUX_BACKPORT(noop_llseek)
-extern loff_t noop_llseek(struct file *file, loff_t offset, int origin);
+#ifndef replace_fops
+/*
+ * This one is to be used *ONLY* from ->open() instances.
+ * fops must be non-NULL, pinned down *and* module dependencies
+ * should be sufficient to pin the caller down as well.
+ */
+#define replace_fops(f, fops) \
+	do {	\
+		struct file *__file = (f); \
+		fops_put(__file->f_op); \
+		BUG_ON(!(__file->f_op = (fops))); \
+	} while(0)
+#endif /* replace_fops */
 
-#define simple_write_to_buffer LINUX_BACKPORT(simple_write_to_buffer)
-extern ssize_t simple_write_to_buffer(void *to, size_t available, loff_t *ppos,
-		const void __user *from, size_t count);
-#endif
+#if (LINUX_VERSION_IS_LESS(4,5,0) && \
+     LINUX_VERSION_IS_GEQ(3,2,0))
+#define no_seek_end_llseek LINUX_BACKPORT(no_seek_end_llseek)
+extern loff_t no_seek_end_llseek(struct file *, loff_t, int);
+#endif /* < 4.5 && >= 3.2 */
 
 #endif	/* _COMPAT_LINUX_FS_H */

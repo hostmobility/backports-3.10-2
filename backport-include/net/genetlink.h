@@ -1,101 +1,184 @@
 #ifndef __BACKPORT_NET_GENETLINK_H
 #define __BACKPORT_NET_GENETLINK_H
 #include_next <net/genetlink.h>
+#include <linux/version.h>
+
+static inline void __bp_genl_info_userhdr_set(struct genl_info *info,
+					      void *userhdr)
+{
+	info->userhdr = userhdr;
+}
+
+static inline void *__bp_genl_info_userhdr(struct genl_info *info)
+{
+	return info->userhdr;
+}
+
+#if LINUX_VERSION_IS_LESS(4,12,0)
+#define GENL_SET_ERR_MSG(info, msg) NL_SET_ERR_MSG(genl_info_extack(info), msg)
+
+static inline int genl_err_attr(struct genl_info *info, int err,
+				struct nlattr *attr)
+{
+	return err;
+}
+#endif /* < 4.12 */
 
 /* this is for patches we apply */
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,7,0)
+static inline struct netlink_ext_ack *genl_info_extack(struct genl_info *info)
+{
+#if LINUX_VERSION_IS_GEQ(4,12,0)
+	return info->extack;
+#else
+	return info->userhdr;
+#endif
+}
+
+/* this gets put in place of info->userhdr, since we use that above */
+static inline void *genl_info_userhdr(struct genl_info *info)
+{
+	return (u8 *)info->genlhdr + GENL_HDRLEN;
+}
+
+/* this is for patches we apply */
+#if LINUX_VERSION_IS_LESS(3,7,0)
 #define genl_info_snd_portid(__genl_info) (__genl_info->snd_pid)
 #else
 #define genl_info_snd_portid(__genl_info) (__genl_info->snd_portid)
 #endif
 
+#if LINUX_VERSION_IS_LESS(3,13,0)
+#define __genl_const
+#else /* < 3.13 */
+#define __genl_const const
+#endif /* < 3.13 */
+
 #ifndef GENLMSG_DEFAULT_SIZE
 #define GENLMSG_DEFAULT_SIZE (NLMSG_DEFAULT_SIZE - GENL_HDRLEN)
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,1,0)
-#define genl_dump_check_consistent(cb, user_hdr, family)
+#if LINUX_VERSION_IS_LESS(3,1,0)
+#define genl_dump_check_consistent(cb, user_hdr) do { } while (0)
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,37)
-struct compat_genl_info {
-	struct genl_info *info;
-
-	u32 snd_seq;
-	u32 snd_pid;
-	struct genlmsghdr *genlhdr;
-	struct nlattr **attrs;
-	void *user_ptr[2];
-};
-#define genl_info compat_genl_info
-
-struct compat_genl_ops {
-	struct genl_ops ops;
-
-	u8 cmd;
-	u8 internal_flags;
-	unsigned int flags;
-	const struct nla_policy *policy;
-
-	int (*doit)(struct sk_buff *skb, struct genl_info *info);
-	int (*dumpit)(struct sk_buff *skb, struct netlink_callback *cb);
-	int (*done)(struct netlink_callback *cb);
-};
-#define genl_ops compat_genl_ops
-
-struct compat_genl_family {
-	struct genl_family family;
-
-	struct list_head list;
-
-	unsigned int id, hdrsize, version, maxattr;
-	const char *name;
-	bool netnsok;
-
-	struct nlattr **attrbuf;
-
-	int (*pre_doit)(struct genl_ops *ops, struct sk_buff *skb,
-			struct genl_info *info);
-
-	void (*post_doit)(struct genl_ops *ops, struct sk_buff *skb,
-			  struct genl_info *info);
-};
-
-#define genl_family compat_genl_family
-
-#define genl_register_family_with_ops compat_genl_register_family_with_ops
-
-int genl_register_family_with_ops(struct genl_family *family,
-				  struct genl_ops *ops, size_t n_ops);
-
-#define genl_unregister_family compat_genl_unregister_family
-
-int genl_unregister_family(struct genl_family *family);
-
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32))
-#define genl_info_net(_info) genl_info_net((_info)->info)
+#if LINUX_VERSION_IS_LESS(4,10,0)
+#define __genl_ro_after_init
+#else
+#define __genl_ro_after_init __ro_after_init
 #endif
 
-#define genlmsg_reply(_msg, _info) genlmsg_reply(_msg, (_info)->info)
-#define genlmsg_put(_skb, _pid, _seq, _fam, _flags, _cmd) genlmsg_put(_skb, _pid, _seq, &(_fam)->family, _flags, _cmd)
-#define genl_register_mc_group(_fam, _grp) genl_register_mc_group(&(_fam)->family, _grp)
-#define genl_unregister_mc_group(_fam, _grp) genl_unregister_mc_group(&(_fam)->family, _grp)
-#endif /* < 2.6.37 */
+#if LINUX_VERSION_IS_LESS(4,15,0)
+#define genlmsg_nlhdr LINUX_BACKPORT(genlmsg_nlhdr)
+static inline struct nlmsghdr *genlmsg_nlhdr(void *user_hdr)
+{
+	return (struct nlmsghdr *)((char *)user_hdr -
+				   GENL_HDRLEN -
+				   NLMSG_HDRLEN);
+}
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,32)
+#ifndef genl_dump_check_consistent
+static inline
+void backport_genl_dump_check_consistent(struct netlink_callback *cb,
+					 void *user_hdr)
+{
+	struct genl_family dummy_family = {
+		.hdrsize = 0,
+	};
+
+	genl_dump_check_consistent(cb, user_hdr, &dummy_family);
+}
+#define genl_dump_check_consistent LINUX_BACKPORT(genl_dump_check_consistent)
+#endif
+#endif /* LINUX_VERSION_IS_LESS(4,15,0) */
+
+#if LINUX_VERSION_IS_LESS(4,20,0)
+static inline int
+__real_backport_genl_register_family(struct genl_family *family)
+{
+	return genl_register_family(family);
+}
+static inline int
+__real_backport_genl_unregister_family(struct genl_family *family)
+{
+	return genl_unregister_family(family);
+}
+
+struct backport_genl_family {
+	struct genl_family	family;
+	const struct genl_ops *	copy_ops;
+
+	/* copied */
+	int			id;		/* private */
+	unsigned int		hdrsize;
+	char			name[GENL_NAMSIZ];
+	unsigned int		version;
+	unsigned int		maxattr;
+	bool			netnsok;
+	bool			parallel_ops;
+	int			(*pre_doit)(__genl_const struct genl_ops *ops,
+					    struct sk_buff *skb,
+					    struct genl_info *info);
+	void			(*post_doit)(__genl_const struct genl_ops *ops,
+					     struct sk_buff *skb,
+					     struct genl_info *info);
 /*
- * struct genl_multicast_group was made netns aware through
- * patch "genetlink: make netns aware" by johannes, we just
- * force this to always use the default init_net
+ * unsupported!
+	int			(*mcast_bind)(struct net *net, int group);
+	void			(*mcast_unbind)(struct net *net, int group);
  */
-#define genl_info_net(x) &init_net
-/* Just use init_net for older kernels */
-#define get_net_ns_by_pid(x) &init_net
+	struct nlattr **	attrbuf;	/* private */
+	__genl_const struct genl_ops *	ops;
+	__genl_const struct genl_multicast_group *mcgrps;
+	unsigned int		n_ops;
+	unsigned int		n_mcgrps;
+	struct module		*module;
+};
+#undef genl_family
+#define genl_family backport_genl_family
 
-/* net namespace is lost */
-#define genlmsg_multicast_netns(a, b, c, d, e)	genlmsg_multicast(b, c, d, e)
-#define genlmsg_multicast_allns(a, b, c, d)	genlmsg_multicast(a, b, c, d)
-#define genlmsg_unicast(net, skb, pid)	genlmsg_unicast(skb, pid)
-#endif
+#define genl_register_family backport_genl_register_family
+int genl_register_family(struct genl_family *family);
+
+#define genl_unregister_family backport_genl_unregister_family
+int backport_genl_unregister_family(struct genl_family *family);
+
+#define genl_notify LINUX_BACKPORT(genl_notify)
+void genl_notify(const struct genl_family *family, struct sk_buff *skb,
+		 struct genl_info *info, u32 group, gfp_t flags);
+
+#define genlmsg_put LINUX_BACKPORT(genlmsg_put)
+void *genlmsg_put(struct sk_buff *skb, u32 portid, u32 seq,
+		  const struct genl_family *family, int flags, u8 cmd);
+
+#define genlmsg_put_reply LINUX_BACKPORT(genlmsg_put_reply)
+void *genlmsg_put_reply(struct sk_buff *skb,
+			struct genl_info *info,
+			const struct genl_family *family,
+			int flags, u8 cmd);
+
+#define genlmsg_multicast_netns LINUX_BACKPORT(genlmsg_multicast_netns)
+int genlmsg_multicast_netns(const struct genl_family *family,
+			    struct net *net, struct sk_buff *skb,
+			    u32 portid, unsigned int group,
+			    gfp_t flags);
+
+#define genlmsg_multicast LINUX_BACKPORT(genlmsg_multicast)
+int genlmsg_multicast(const struct genl_family *family,
+		      struct sk_buff *skb, u32 portid,
+		      unsigned int group, gfp_t flags);
+
+#define genlmsg_multicast_allns LINUX_BACKPORT(genlmsg_multicast_allns)
+int backport_genlmsg_multicast_allns(const struct genl_family *family,
+				     struct sk_buff *skb, u32 portid,
+				     unsigned int group, gfp_t flags);
+
+#define genl_family_attrbuf LINUX_BACKPORT(genl_family_attrbuf)
+static inline struct nlattr **genl_family_attrbuf(struct genl_family *family)
+{
+	WARN_ON(family->parallel_ops);
+
+	return family->attrbuf;
+}
+#endif /* LINUX_VERSION_IS_LESS(4,20,0) */
 
 #endif /* __BACKPORT_NET_GENETLINK_H */

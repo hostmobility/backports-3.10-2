@@ -3,8 +3,6 @@
 #
 
 menuconfig BT
-	depends on !BACKPORT_KERNEL_2_6_27
-	depends on !BACKPORT_KERNEL_2_6_29
 	tristate "Bluetooth subsystem support"
 	depends on m
 	depends on NET && !S390
@@ -13,8 +11,10 @@ menuconfig BT
 	depends on CRYPTO
 	depends on CRYPTO_BLKCIPHER
 	depends on CRYPTO_AES
+	depends on CRYPTO_CMAC
 	depends on CRYPTO_ECB
 	depends on CRYPTO_SHA256
+	depends on CRYPTO_ECDH
 	help
 	  Bluetooth is low-cost, low-power, short-range wireless technology.
 	  It was designed as a replacement for cables and other short-range
@@ -42,6 +42,16 @@ menuconfig BT
 	  to Bluetooth kernel modules are provided in the BlueZ packages.  For
 	  more information, see <http://www.bluez.org/>.
 
+config BT_BREDR
+	bool "Bluetooth Classic (BR/EDR) features"
+	depends on BT
+	default y
+	help
+	  Bluetooth Classic includes support for Basic Rate (BR)
+	  available with Bluetooth version 1.0b or later and support
+	  for Enhanced Data Rate (EDR) available with Bluetooth
+	  version 2.0 or later.
+
 source "net/bluetooth/rfcomm/Kconfig"
 
 source "net/bluetooth/bnep/Kconfig"
@@ -49,5 +59,73 @@ source "net/bluetooth/bnep/Kconfig"
 source "net/bluetooth/cmtp/Kconfig"
 
 source "net/bluetooth/hidp/Kconfig"
+
+config BT_HS
+	bool "Bluetooth High Speed (HS) features"
+	depends on BT_BREDR
+	default y
+	help
+	  Bluetooth High Speed includes support for off-loading
+	  Bluetooth connections via 802.11 (wifi) physical layer
+	  available with Bluetooth version 3.0 or later.
+
+config BT_LE
+	bool "Bluetooth Low Energy (LE) features"
+	depends on BT
+	default y
+	help
+	  Bluetooth Low Energy includes support low-energy physical
+	  layer available with Bluetooth version 4.0 or later.
+
+config BT_6LOWPAN
+	tristate "Bluetooth 6LoWPAN support"
+	depends on m
+	depends on BT_LE && 6LOWPAN
+	help
+	  IPv6 compression over Bluetooth Low Energy.
+
+config BT_LEDS
+	bool "Enable LED triggers"
+	depends on BT
+	depends on LEDS_CLASS
+	select BPAUTO_LEDS_TRIGGERS
+	help
+	  This option selects a few LED triggers for different
+	  Bluetooth events.
+
+config BT_SELFTEST
+	bool "Bluetooth self testing support"
+	depends on BT && DEBUG_KERNEL
+	help
+	  Run self tests when initializing the Bluetooth subsystem.  This
+	  is a developer option and can cause significant delay when booting
+	  the system.
+
+	  When the Bluetooth subsystem is built as module, then the test
+	  cases are run first thing at module load time.  When the Bluetooth
+	  subsystem is compiled into the kernel image, then the test cases
+	  are run late in the initcall hierarchy.
+
+config BT_SELFTEST_ECDH
+	bool "ECDH test cases"
+	depends on BT_LE && BT_SELFTEST
+	help
+	  Run test cases for ECDH cryptographic functionality used by the
+	  Bluetooth Low Energy Secure Connections feature.
+
+config BT_SELFTEST_SMP
+	bool "SMP test cases"
+	depends on BT_LE && BT_SELFTEST
+	help
+	  Run test cases for SMP cryptographic functionality, including both
+	  legacy SMP as well as the Secure Connections features.
+
+config BT_DEBUGFS
+	bool "Export Bluetooth internals in debugfs"
+	depends on BT && DEBUG_FS
+	default y
+	help
+	  Provide extensive information about internal Bluetooth states
+	  in debugfs.
 
 source "drivers/bluetooth/Kconfig"

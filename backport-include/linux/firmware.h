@@ -1,29 +1,20 @@
 #ifndef __BACKPORT_LINUX_FIRMWARE_H
 #define __BACKPORT_LINUX_FIRMWARE_H
 #include_next <linux/firmware.h>
-#include <linux/version.h>
 
-#if defined(CPTCFG_BACKPORT_BUILD_FW_LOADER_MODULE)
-#define request_firmware_nowait LINUX_BACKPORT(request_firmware_nowait)
-#define request_firmware LINUX_BACKPORT(request_firmware)
-#define release_firmware LINUX_BACKPORT(release_firmware)
-
-int request_firmware(const struct firmware **fw, const char *name,
-		     struct device *device);
-int request_firmware_nowait(
-	struct module *module, int uevent,
-	const char *name, struct device *device, gfp_t gfp, void *context,
-	void (*cont)(const struct firmware *fw, void *context));
-
-void release_firmware(const struct firmware *fw);
+#if LINUX_VERSION_IS_LESS(3,14,0)
+#define request_firmware_direct(fw, name, device) request_firmware(fw, name, device)
+#endif
+#if LINUX_VERSION_IS_LESS(4,18,0)
+#define firmware_request_nowarn(fw, name, device) request_firmware(fw, name, device)
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,27)
-struct builtin_fw {
-	char *name;
-	void *data;
-	unsigned long size;
-};
+#if LINUX_VERSION_IS_LESS(4,17,0)
+#define firmware_request_cache LINUX_BACKPORT(firmware_request_cache)
+static inline int firmware_request_cache(struct device *device, const char *name)
+{
+	return 0;
+}
 #endif
 
 #endif /* __BACKPORT_LINUX_FIRMWARE_H */

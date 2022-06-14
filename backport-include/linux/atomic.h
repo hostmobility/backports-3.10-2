@@ -1,46 +1,79 @@
-#ifndef _COMPAT_LINUX_ATOMIC_H
-#define _COMPAT_LINUX_ATOMIC_H 1
-
-#include <linux/version.h>
-
-#if (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,36))
+#ifndef __BP_ATOMIC_H
+#define __BP_ATOMIC_H
 #include_next <linux/atomic.h>
-#else
 
-#include <asm/atomic.h>
+/* atomic_cmpxchg_relaxed */
+#ifndef atomic_cmpxchg_relaxed
+#define  atomic_cmpxchg_relaxed		atomic_cmpxchg
+#define  atomic_cmpxchg_acquire		atomic_cmpxchg
+#define  atomic_cmpxchg_release		atomic_cmpxchg
 
-/**
- * atomic_inc_not_zero_hint - increment if not null
+#else /* atomic_cmpxchg_relaxed */
+
+#ifndef atomic_cmpxchg_acquire
+#define  atomic_cmpxchg_acquire(...)					\
+	__atomic_op_acquire(atomic_cmpxchg, __VA_ARGS__)
+#endif
+
+#ifndef atomic_cmpxchg_release
+#define  atomic_cmpxchg_release(...)					\
+	__atomic_op_release(atomic_cmpxchg, __VA_ARGS__)
+#endif
+
+#ifndef atomic_cmpxchg
+#define  atomic_cmpxchg(...)						\
+	__atomic_op_fence(atomic_cmpxchg, __VA_ARGS__)
+#endif
+#endif /* atomic_cmpxchg_relaxed */
+
+/* these were introduced together, so just a single check is enough */
+#ifndef atomic_try_cmpxchg_acquire
+#ifndef atomic_try_cmpxchg
+#define __atomic_try_cmpxchg(type, _p, _po, _n)				\
+({									\
+	typeof(_po) __po = (_po);					\
+	typeof(*(_po)) __r, __o = *__po;				\
+	__r = atomic_cmpxchg##type((_p), __o, (_n));			\
+	if (unlikely(__r != __o))					\
+		*__po = __r;						\
+	likely(__r == __o);						\
+})
+
+#define atomic_try_cmpxchg(_p, _po, _n)		__atomic_try_cmpxchg(, _p, _po, _n)
+#define atomic_try_cmpxchg_relaxed(_p, _po, _n)	__atomic_try_cmpxchg(_relaxed, _p, _po, _n)
+#define atomic_try_cmpxchg_acquire(_p, _po, _n)	__atomic_try_cmpxchg(_acquire, _p, _po, _n)
+#define atomic_try_cmpxchg_release(_p, _po, _n)	__atomic_try_cmpxchg(_release, _p, _po, _n)
+#else /* atomic_try_cmpxchg */
+#define atomic_try_cmpxchg_relaxed	atomic_try_cmpxchg
+#define atomic_try_cmpxchg_acquire	atomic_try_cmpxchg
+#define atomic_try_cmpxchg_release	atomic_try_cmpxchg
+#endif /* atomic_try_cmpxchg */
+
+#endif /* atomic_try_cmpxchg_acquire */
+
+#if LINUX_VERSION_IS_LESS(3,7,0)
+/*
+ * atomic_dec_if_positive - decrement by 1 if old value positive
  * @v: pointer of type atomic_t
- * @hint: probable value of the atomic before the increment
  *
- * This version of atomic_inc_not_zero() gives a hint of probable
- * value of the atomic. This helps processor to not read the memory
- * before doing the atomic read/modify/write cycle, lowering
- * number of bus transactions on some arches.
- *
- * Returns: 0 if increment was not done, 1 otherwise.
+ * The function returns the old value of *v minus 1, even if
+ * the atomic variable, v, was not decremented.
  */
-#ifndef atomic_inc_not_zero_hint
-static inline int atomic_inc_not_zero_hint(atomic_t *v, int hint)
+static inline int atomic_dec_if_positive(atomic_t *v)
 {
-	int val, c = hint;
-
-	/* sanity test, should be removed by compiler if hint is a constant */
-	if (!hint)
-		return atomic_inc_not_zero(v);
-
-	do {
-		val = atomic_cmpxchg(v, c, c + 1);
-		if (val == c)
-			return 1;
-		c = val;
-	} while (c);
-
-	return 0;
+	int c, old, dec;
+	c = atomic_read(v);
+	for (;;) {
+		dec = c - 1;
+		if (unlikely(dec < 0))
+			break;
+		old = atomic_cmpxchg((v), c, dec);
+		if (likely(old == c))
+			break;
+		c = old;
+	}
+	return dec;
 }
 #endif
 
-#endif /* (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,36)) */
-
-#endif	/* _COMPAT_LINUX_ATOMIC_H */
+#endif /* __BP_ATOMIC_H */

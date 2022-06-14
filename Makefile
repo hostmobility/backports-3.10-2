@@ -6,7 +6,7 @@ ifeq ($(KERNELRELEASE),)
 
 MAKEFLAGS += --no-print-directory
 SHELL := /bin/bash
-BACKPORT_PWD := $(shell pwd)
+BACKPORT_DIR := $(shell pwd)
 
 KMODDIR ?= updates
 ifneq ($(origin KLIB), undefined)
@@ -20,7 +20,7 @@ KERNEL_CONFIG := $(KLIB_BUILD)/.config
 KERNEL_MAKEFILE := $(KLIB_BUILD)/Makefile
 CONFIG_MD5 := $(shell md5sum $(KERNEL_CONFIG) 2>/dev/null | sed 's/\s.*//')
 
-export KLIB KLIB_BUILD BACKPORT_PWD KMODDIR KMODPATH_ARG
+export KLIB KLIB_BUILD BACKPORT_DIR KMODDIR KMODPATH_ARG
 
 # disable built-in rules for this file
 .SUFFIXES:
@@ -37,7 +37,7 @@ mrproper:
 	@rm -f backport-include/backport/autoconf.h
 
 .DEFAULT:
-	@set -e ; test -f .local-symbols || (						\
+	@set -e ; test -f local-symbols || (						\
 	echo "/--------------"								;\
 	echo "| You shouldn't run make in the backports tree, but only in"		;\
 	echo "| the generated output. This here is only the skeleton code"		;\
@@ -63,7 +63,7 @@ mrproper:
 	@set -e ; if [ "$$(cat .kernel_config_md5 2>/dev/null)" != "$(CONFIG_MD5)" ]	;\
 	then 										\
 		echo -n "Generating local configuration database from kernel ..."	;\
-		grep -v -f .local-symbols $(KERNEL_CONFIG) | grep = | (			\
+		grep -v -f local-symbols $(KERNEL_CONFIG) | grep = | (			\
 			while read l ; do						\
 				if [ "$${l:0:7}" != "CONFIG_" ] ; then			\
 					continue					;\
@@ -85,15 +85,16 @@ mrproper:
 			done								\
 		) > Kconfig.kernel							;\
 		kver=$$($(MAKE) --no-print-directory -C $(KLIB_BUILD) kernelversion |	\
-			sed 's/^\(\(3\|2\.6\)\.[0-9]\+\).*/\1/;t;d')			;\
+			sed 's/^\(\([3-4]\|2\.6\)\.[0-9]\+\).*/\1/;t;d')		;\
 		test "$$kver" != "" || echo "Kernel version parse failed!"		;\
 		test "$$kver" != ""							;\
 		kvers="$$(seq 14 39 | sed 's/^/2.6./')"					;\
-		kvers="$$kvers $$(seq 0 99 | sed 's/^/3./')"				;\
+		kvers="$$kvers $$(seq 0 19 | sed 's/^/3./')"				;\
+		kvers="$$kvers $$(seq 0 99 | sed 's/^/4./')"				;\
 		print=0									;\
 		for v in $$kvers ; do							\
 			if [ "$$print" = "1" ] ; then					\
-				echo config BACKPORT_KERNEL_$$(echo $$v | tr . _)	;\
+				echo config KERNEL_$$(echo $$v | tr . _)	;\
 				echo "    def_bool y"					;\
 			fi								;\
 			if [ "$$v" = "$$kver" ] ; then print=1 ; fi			;\
@@ -138,7 +139,6 @@ help: defconfig-help
 	@echo ""
 	@echo "Configuration targets:"
 	@echo "  menuconfig      - Update current config utilising a menu based program"
-	@echo "  allyesconfig    - New config where all options are accepted with yes"
 	@echo "  oldconfig       - Update current config utilising a provided .config as base"
 	@echo "  oldaskconfig    - ??"
 	@echo "  silentoldconfig - Same as oldconfig, but quietly, additionally update deps"
@@ -160,5 +160,5 @@ help: defconfig-help
 	@echo ""
 	@echo "Execute "make" or "make all" to build all targets marked with [*]"
 else
-include $(BACKPORT_PWD)/Makefile.kernel
+include $(BACKPORT_DIR)/Makefile.kernel
 endif

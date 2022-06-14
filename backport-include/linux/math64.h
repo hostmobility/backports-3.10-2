@@ -1,41 +1,27 @@
-#ifndef _COMPAT_LINUX_MATH64_H
-#define _COMPAT_LINUX_MATH64_H 1
-
-#include <linux/version.h>
-
-#if (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,25))
+#ifndef __BACKPORT_LINUX_MATH64_H
+#define __BACKPORT_LINUX_MATH64_H
 #include_next <linux/math64.h>
-#endif /* (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,25)) */
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+#if LINUX_VERSION_IS_LESS(3,12,0)
+
 #if BITS_PER_LONG == 64
-
-static inline u64 div_u64_rem(u64 dividend, u32 divisor, u32 *remainder)
+/**
+ * div64_u64_rem - unsigned 64bit divide with 64bit divisor and remainder
+ */
+#define div64_u64_rem LINUX_BACKPORT(div64_u64_rem)
+static inline u64 div64_u64_rem(u64 dividend, u64 divisor, u64 *remainder)
 {
 	*remainder = dividend % divisor;
 	return dividend / divisor;
 }
-
 #elif BITS_PER_LONG == 32
-
-#ifndef div_u64_rem
-static inline u64 div_u64_rem(u64 dividend, u32 divisor, u32 *remainder)
-{
-	*remainder = do_div(dividend, divisor);
-	return dividend;
-}
+#ifndef div64_u64_rem
+#define div64_u64_rem LINUX_BACKPORT(div64_u64_rem)
+#define backports_div64_u64_rem_add 1
+extern u64 div64_u64_rem(u64 dividend, u64 divisor, u64 *remainder);
 #endif
 
 #endif /* BITS_PER_LONG */
+#endif /* < 3.12 */
 
-#ifndef div_u64
-static inline u64 div_u64(u64 dividend, u32 divisor)
-{
-	u32 remainder;
-	return div_u64_rem(dividend, divisor, &remainder);
-}
-#endif
-
-#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26) */
-
-#endif	/* _COMPAT_LINUX_MATH64_H */
+#endif /* __BACKPORT_LINUX_MATH64_H */

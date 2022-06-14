@@ -18,9 +18,16 @@
 #include <linux/version.h>
 #include_next <linux/regulator/driver.h>
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,6,0))
-int regulator_map_voltage_ascend(struct regulator_dev *rdev,
-				 int min_uV, int max_uV);
-#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(3,6,0)) */
+#if LINUX_VERSION_IS_LESS(3,13,0) && \
+    LINUX_VERSION_IS_GEQ(3,5,0)
+#define devm_regulator_register LINUX_BACKPORT(devm_regulator_register)
+struct regulator_dev *
+devm_regulator_register(struct device *dev,
+			const struct regulator_desc *regulator_desc,
+			const struct regulator_config *config);
+#define devm_regulator_unregister LINUX_BACKPORT(devm_regulator_unregister)
+void devm_regulator_unregister(struct device *dev, struct regulator_dev *rdev);
+#endif /* LINUX_VERSION_IS_LESS(3,13,0) &&
+	  LINUX_VERSION_IS_GEQ(3,5,0) */
 
 #endif /* __BACKPORT_LINUX_REGULATOR_DRIVER_H_ */
