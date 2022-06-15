@@ -15,8 +15,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
  *
  *  Portions of this file are based on NDISwrapper project,
  *  Copyright (C) 2003-2005 Pontus Fuchs, Giridhar Pemmasani
@@ -1629,11 +1628,7 @@ static void set_multicast_list(struct usbnet *usbdev)
 
 		netdev_for_each_mc_addr(ha, usbdev->net)
 			memcpy(mc_addrs + i++ * ETH_ALEN,
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35))
-			       ha->addr, ETH_ALEN);
-#else
-			       ha->dmi_addr, ETH_ALEN);
-#endif
+			       mc_addr(ha), ETH_ALEN);
 	}
 	netif_addr_unlock_bh(usbdev->net);
 

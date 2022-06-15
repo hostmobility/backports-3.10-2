@@ -242,6 +242,8 @@ config IR_REDRAT3
 	depends on m
 	depends on USB_ARCH_HAS_HCD
 	depends on RC_CORE
+	select BACKPORT_NEW_LEDS
+	select BACKPORT_LEDS_CLASS
 	depends on USB
 	---help---
 	   Say Y here if you want to use a RedRat3 Infrared Transceiver.
@@ -269,7 +271,6 @@ config IR_WINBOND_CIR
 	depends on RC_CORE
 	select BACKPORT_NEW_LEDS
 	select BACKPORT_LEDS_CLASS
-	select BACKPORT_LEDS_TRIGGERS
 	depends on BITREVERSE
 	---help---
 	   Say Y here if you want to use the IR remote functionality found
@@ -347,5 +348,16 @@ config IR_GPIO_CIR
 
 	   To compile this driver as a module, choose M here: the module will
 	   be called gpio-ir-recv.
+
+config RC_ST
+	tristate "ST remote control receiver"
+	depends on m
+	depends on ARCH_STI && RC_CORE
+	help
+	 Say Y here if you want support for ST remote control driver
+	 which allows both IR and UHF RX.
+	 The driver passes raw pulse and space information to the LIRC decoder.
+
+	 If you're not sure, select N here.
 
 endif #RC_DEVICES

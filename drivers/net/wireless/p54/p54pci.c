@@ -631,7 +631,6 @@ static int p54p_probe(struct pci_dev *pdev,
 	iounmap(priv->map);
 
  err_free_dev:
-	pci_set_drvdata(pdev, NULL);
 	p54_free_common(dev);
 
  err_free_reg:
@@ -686,7 +685,6 @@ static int p54p_resume(struct device *device)
 
 compat_pci_suspend(p54p_suspend);
 compat_pci_resume(p54p_resume);
-
 static SIMPLE_DEV_PM_OPS(p54pci_pm_ops, p54p_suspend, p54p_resume);
 
 #define P54P_PM_OPS (&p54pci_pm_ops)
@@ -702,8 +700,8 @@ static struct pci_driver p54p_driver = {
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,29))
 	.driver.pm	= P54P_PM_OPS,
 #elif defined(CONFIG_PM_SLEEP)
-	.suspend    = p54p_suspend_compat,
-	.resume     = p54p_resume_compat,
+	.suspend = p54p_suspend_compat,
+	.resume = p54p_resume_compat,
 #endif
 };
 

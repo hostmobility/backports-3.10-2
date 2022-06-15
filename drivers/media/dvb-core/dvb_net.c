@@ -1159,7 +1159,7 @@ static void wq_set_multicast_list (struct work_struct *work)
 		priv->multi_num = 0;
 
 		netdev_for_each_mc_addr(ha, dev)
-			dvb_set_mc_filter(dev, ha->addr);
+			dvb_set_mc_filter(dev, mc_addr(ha));
 	}
 
 	netif_addr_unlock_bh(dev);
@@ -1241,7 +1241,7 @@ static void dvb_net_setup(struct net_device *dev)
 	ether_setup(dev);
 
 	dev->header_ops		= &dvb_header_ops;
-	dev->netdev_ops		= &dvb_netdev_ops;
+	netdev_attach_ops(dev, &dvb_netdev_ops);
 	dev->mtu		= 4096;
 
 	dev->flags |= IFF_NOARP;

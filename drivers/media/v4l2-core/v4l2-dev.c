@@ -31,6 +31,10 @@
 #include <media/v4l2-device.h>
 #include <media/v4l2-ioctl.h>
 
+
+#define CREATE_TRACE_POINTS
+#include <trace/events/v4l2.h>
+
 #define VIDEO_NUM_DEVICES	256
 #define VIDEO_NAME              "video4linux"
 
@@ -38,24 +42,25 @@
  *	sysfs stuff
  */
 
-static ssize_t show_index(struct device *cd,
-			 struct device_attribute *attr, char *buf)
+static ssize_t index_show(struct device *cd,
+			  struct device_attribute *attr, char *buf)
 {
 	struct video_device *vdev = to_video_device(cd);
 
 	return sprintf(buf, "%i\n", vdev->index);
 }
+static DEVICE_ATTR_RO(index);
 
-static ssize_t show_debug(struct device *cd,
-			 struct device_attribute *attr, char *buf)
+static ssize_t debug_show(struct device *cd,
+			  struct device_attribute *attr, char *buf)
 {
 	struct video_device *vdev = to_video_device(cd);
 
 	return sprintf(buf, "%i\n", vdev->debug);
 }
 
-static ssize_t set_debug(struct device *cd, struct device_attribute *attr,
-		   const char *buf, size_t len)
+static ssize_t debug_store(struct device *cd, struct device_attribute *attr,
+			  const char *buf, size_t len)
 {
 	struct video_device *vdev = to_video_device(cd);
 	int res = 0;
@@ -68,21 +73,29 @@ static ssize_t set_debug(struct device *cd, struct device_attribute *attr,
 	vdev->debug = value;
 	return len;
 }
+static DEVICE_ATTR_RW(debug);
 
-static ssize_t show_name(struct device *cd,
+static ssize_t name_show(struct device *cd,
 			 struct device_attribute *attr, char *buf)
 {
 	struct video_device *vdev = to_video_device(cd);
 
 	return sprintf(buf, "%.*s\n", (int)sizeof(vdev->name), vdev->name);
 }
+static DEVICE_ATTR_RO(name);
 
-static struct device_attribute video_device_attrs[] = {
-	__ATTR(name, S_IRUGO, show_name, NULL),
-	__ATTR(debug, 0644, show_debug, set_debug),
-	__ATTR(index, S_IRUGO, show_index, NULL),
-	__ATTR_NULL
+static struct attribute *video_device_attrs[] = {
+	&dev_attr_name.attr,
+	&dev_attr_debug.attr,
+	&dev_attr_index.attr,
+	NULL,
 };
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,11,0)
+ATTRIBUTE_GROUPS(video_device);
+#else
+#define BP_ATTR_GRP_STRUCT device_attribute
+ATTRIBUTE_GROUPS_BACKPORT(video_device);
+#endif
 
 /*
  *	Active devices
@@ -217,7 +230,11 @@ static void v4l2_device_release(struct device *cd)
 
 static struct class video_class = {
 	.name = VIDEO_NAME,
-	.dev_attrs = video_device_attrs,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,11,0)
+	.dev_groups = video_device_groups,
+#else
+	.dev_attrs = video_device_dev_attrs,
+#endif
 };
 
 struct video_device *video_devdata(struct file *file)
@@ -387,6 +404,11 @@ static long v4l2_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	} else
 		ret = -ENOTTY;
 
+	if (cmd == VIDIOC_DQBUF)
+		trace_v4l2_dqbuf(vdev->minor, (struct v4l2_buffer *)arg);
+	else if (cmd == VIDIOC_QBUF)
+		trace_v4l2_qbuf(vdev->minor, (struct v4l2_buffer *)arg);
+
 	return ret;
 }
 
@@ -495,8 +517,8 @@ static const struct file_operations v4l2_fops = {
 };
 
 /**
- * get_index - assign stream index number based on parent device
- * @vdev: video_device to assign index number to, vdev->parent should be assigned
+ * get_index - assign stream index number based on v4l2_dev
+ * @vdev: video_device to assign index number to, vdev->v4l2_dev should be assigned
  *
  * Note that when this is called the new device has not yet been registered
  * in the video_device array, but it was able to obtain a minor number.
@@ -514,15 +536,11 @@ static int get_index(struct video_device *vdev)
 	static DECLARE_BITMAP(used, VIDEO_NUM_DEVICES);
 	int i;
 
-	/* Some drivers do not set the parent. In that case always return 0. */
-	if (vdev->parent == NULL)
-		return 0;
-
 	bitmap_zero(used, VIDEO_NUM_DEVICES);
 
 	for (i = 0; i < VIDEO_NUM_DEVICES; i++) {
 		if (video_device[i] != NULL &&
-		    video_device[i]->parent == vdev->parent) {
+		    video_device[i]->v4l2_dev == vdev->v4l2_dev) {
 			set_bit(video_device[i]->index, used);
 		}
 	}
@@ -596,7 +614,6 @@ static void determine_valid_ioctls(struct video_device *vdev)
 	set_bit(_IOC_NR(VIDIOC_DBG_G_REGISTER), valid_ioctls);
 	set_bit(_IOC_NR(VIDIOC_DBG_S_REGISTER), valid_ioctls);
 #endif
-	SET_VALID_IOCTL(ops, VIDIOC_DBG_G_CHIP_IDENT, vidioc_g_chip_ident);
 	/* yes, really vidioc_subscribe_event */
 	SET_VALID_IOCTL(ops, VIDIOC_DQEVENT, vidioc_subscribe_event);
 	SET_VALID_IOCTL(ops, VIDIOC_SUBSCRIBE_EVENT, vidioc_subscribe_event);
@@ -675,9 +692,8 @@ static void determine_valid_ioctls(struct video_device *vdev)
 		SET_VALID_IOCTL(ops, VIDIOC_PREPARE_BUF, vidioc_prepare_buf);
 		if (ops->vidioc_s_std)
 			set_bit(_IOC_NR(VIDIOC_ENUMSTD), valid_ioctls);
-		if (ops->vidioc_g_std || vdev->current_norm)
-			set_bit(_IOC_NR(VIDIOC_G_STD), valid_ioctls);
 		SET_VALID_IOCTL(ops, VIDIOC_S_STD, vidioc_s_std);
+		SET_VALID_IOCTL(ops, VIDIOC_G_STD, vidioc_g_std);
 		if (is_rx) {
 			SET_VALID_IOCTL(ops, VIDIOC_QUERYSTD, vidioc_querystd);
 			SET_VALID_IOCTL(ops, VIDIOC_ENUMINPUT, vidioc_enum_input);
@@ -705,7 +721,7 @@ static void determine_valid_ioctls(struct video_device *vdev)
 		if (ops->vidioc_cropcap || ops->vidioc_g_selection)
 			set_bit(_IOC_NR(VIDIOC_CROPCAP), valid_ioctls);
 		if (ops->vidioc_g_parm || (vdev->vfl_type == VFL_TYPE_GRABBER &&
-					(ops->vidioc_g_std || vdev->current_norm)))
+					ops->vidioc_g_std))
 			set_bit(_IOC_NR(VIDIOC_G_PARM), valid_ioctls);
 		SET_VALID_IOCTL(ops, VIDIOC_S_PARM, vidioc_s_parm);
 		SET_VALID_IOCTL(ops, VIDIOC_S_DV_TIMINGS, vidioc_s_dv_timings);
@@ -777,6 +793,9 @@ int __video_register_device(struct video_device *vdev, int type, int nr,
 	/* the release callback MUST be present */
 	if (WARN_ON(!vdev->release))
 		return -EINVAL;
+	/* the v4l2_dev pointer MUST be present */
+	if (WARN_ON(!vdev->v4l2_dev))
+		return -EINVAL;
 
 	/* v4l2_fh support */
 	spin_lock_init(&vdev->fh_lock);
@@ -804,16 +823,14 @@ int __video_register_device(struct video_device *vdev, int type, int nr,
 
 	vdev->vfl_type = type;
 	vdev->cdev = NULL;
-	if (vdev->v4l2_dev) {
-		if (vdev->v4l2_dev->dev)
-			vdev->parent = vdev->v4l2_dev->dev;
-		if (vdev->ctrl_handler == NULL)
-			vdev->ctrl_handler = vdev->v4l2_dev->ctrl_handler;
-		/* If the prio state pointer is NULL, then use the v4l2_device
-		   prio state. */
-		if (vdev->prio == NULL)
-			vdev->prio = &vdev->v4l2_dev->prio;
-	}
+	if (vdev->dev_parent == NULL)
+		vdev->dev_parent = vdev->v4l2_dev->dev;
+	if (vdev->ctrl_handler == NULL)
+		vdev->ctrl_handler = vdev->v4l2_dev->ctrl_handler;
+	/* If the prio state pointer is NULL, then use the v4l2_device
+	   prio state. */
+	if (vdev->prio == NULL)
+		vdev->prio = &vdev->v4l2_dev->prio;
 
 	/* Part 2: find a free minor, device node number and device index. */
 #ifdef CPTCFG_VIDEO_FIXED_MINOR_RANGES
@@ -874,6 +891,7 @@ int __video_register_device(struct video_device *vdev, int type, int nr,
 	/* Should not happen since we thought this minor was free */
 	WARN_ON(video_device[vdev->minor] != NULL);
 	vdev->index = get_index(vdev);
+	video_device[vdev->minor] = vdev;
 	mutex_unlock(&videodev_lock);
 
 	if (vdev->ioctl_ops)
@@ -898,8 +916,7 @@ int __video_register_device(struct video_device *vdev, int type, int nr,
 	/* Part 4: register the device with sysfs */
 	vdev->dev.class = &video_class;
 	vdev->dev.devt = MKDEV(VIDEO_MAJOR, vdev->minor);
-	if (vdev->parent)
-		vdev->dev.parent = vdev->parent;
+	vdev->dev.parent = vdev->dev_parent;
 	dev_set_name(&vdev->dev, "%s%d", name_base, vdev->num);
 	ret = device_register(&vdev->dev);
 	if (ret < 0) {
@@ -936,9 +953,6 @@ int __video_register_device(struct video_device *vdev, int type, int nr,
 #endif
 	/* Part 6: Activate this minor. The char device can now be used. */
 	set_bit(V4L2_FL_REGISTERED, &vdev->flags);
-	mutex_lock(&videodev_lock);
-	video_device[vdev->minor] = vdev;
-	mutex_unlock(&videodev_lock);
 
 	return 0;
 
@@ -946,6 +960,7 @@ cleanup:
 	mutex_lock(&videodev_lock);
 	if (vdev->cdev)
 		cdev_del(vdev->cdev);
+	video_device[vdev->minor] = NULL;
 	devnode_clear(vdev);
 	mutex_unlock(&videodev_lock);
 	/* Mark this video device as never having been registered. */
@@ -993,6 +1008,7 @@ static int __init videodev_init(void)
 		return ret;
 	}
 
+	init_video_device_attrs();
 	ret = class_register(&video_class);
 	if (ret < 0) {
 		unregister_chrdev_region(dev, VIDEO_NUM_DEVICES);

@@ -374,7 +374,8 @@ static ssize_t \
 attrib##_show(struct device *dev, struct device_attribute *attr, char *buf) \
 { \
 	return sprintf(buf, format_string, dev_to_ssb_dev(dev)->field); \
-}
+} \
+static DEVICE_ATTR_RO(attrib);
 
 ssb_config_attr(core_num, core_index, "%u\n")
 ssb_config_attr(coreid, id.coreid, "0x%04x\n")
@@ -387,16 +388,23 @@ name_show(struct device *dev, struct device_attribute *attr, char *buf)
 	return sprintf(buf, "%s\n",
 		       ssb_core_name(dev_to_ssb_dev(dev)->id.coreid));
 }
+static DEVICE_ATTR_RO(name);
 
-static struct device_attribute ssb_device_attrs[] = {
-	__ATTR_RO(name),
-	__ATTR_RO(core_num),
-	__ATTR_RO(coreid),
-	__ATTR_RO(vendor),
-	__ATTR_RO(revision),
-	__ATTR_RO(irq),
-	__ATTR_NULL,
+static struct attribute *ssb_device_attrs[] = {
+	&dev_attr_name.attr,
+	&dev_attr_core_num.attr,
+	&dev_attr_coreid.attr,
+	&dev_attr_vendor.attr,
+	&dev_attr_revision.attr,
+	&dev_attr_irq.attr,
+	NULL,
 };
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,12,0)
+ATTRIBUTE_GROUPS(ssb_device);
+#else
+#define BP_ATTR_GRP_STRUCT device_attribute
+ATTRIBUTE_GROUPS_BACKPORT(ssb_device);
+#endif
 
 static struct bus_type ssb_bustype = {
 	.name		= "ssb",
@@ -407,7 +415,11 @@ static struct bus_type ssb_bustype = {
 	.suspend	= ssb_device_suspend,
 	.resume		= ssb_device_resume,
 	.uevent		= ssb_device_uevent,
-	.dev_attrs	= ssb_device_attrs,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,12,0)
+	.dev_groups	= ssb_device_groups,
+#else
+	.dev_attrs	= ssb_device_dev_attrs,
+#endif
 };
 
 static void ssb_buses_lock(void)
@@ -554,6 +566,14 @@ static int ssb_devices_register(struct ssb_bus *bus)
 		err = platform_device_register(&ssb_pflash_dev);
 		if (err)
 			pr_err("Error registering parallel flash\n");
+	}
+#endif
+
+#ifdef CPTCFG_SSB_SFLASH
+	if (bus->mipscore.sflash.present) {
+		err = platform_device_register(&ssb_sflash_dev);
+		if (err)
+			pr_err("Error registering serial flash\n");
 	}
 #endif
 
@@ -1450,6 +1470,7 @@ static int __init ssb_modinit(void)
 {
 	int err;
 
+	init_ssb_device_attrs();
 	/* See the comment at the ssb_is_early_boot definition */
 	ssb_is_early_boot = 0;
 	err = bus_register(&ssb_bustype);

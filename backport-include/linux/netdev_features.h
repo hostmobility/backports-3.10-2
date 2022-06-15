@@ -18,7 +18,9 @@
 #define NETIF_F_HW_VLAN_CTAG_FILTER		NETIF_F_HW_VLAN_FILTER
 #endif
 
+#if RHEL_RELEASE_CODE < RHEL_RELEASE_VERSION(6,5)
 typedef u32 netdev_features_t;
+#endif
 #else
 #include_next <linux/netdev_features.h>
 
@@ -37,6 +39,14 @@ typedef u32 netdev_features_t;
 
 #if !defined(NETIF_F_RXCSUM)
 #define NETIF_F_RXCSUM 0
+#endif
+
+#if !defined(NETIF_F_RXALL)
+#define NETIF_F_RXALL 0
+#endif
+
+#if !defined(NETIF_F_RXFCS)
+#define NETIF_F_RXFCS 0
 #endif
 
 #endif /* __BACKPORT_NETDEV_FEATURES_H */

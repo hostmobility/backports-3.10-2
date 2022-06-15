@@ -349,34 +349,18 @@ static int lbs_add_mcast_addrs(struct cmd_ds_mac_multicast_adr *cmd,
 	netif_addr_lock_bh(dev);
 	cnt = netdev_mc_count(dev);
 	netdev_for_each_mc_addr(ha, dev) {
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35))
-		if (mac_in_list(cmd->maclist, nr_addrs, ha->addr)) {
-#else
-		if (mac_in_list(cmd->maclist, nr_addrs, ha->dmi_addr)) {
-#endif
+		if (mac_in_list(cmd->maclist, nr_addrs, mc_addr(ha))) {
 			lbs_deb_net("mcast address %s:%pM skipped\n", dev->name,
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35))
-				    ha->addr);
-#else
-				    ha->dmi_addr);
-#endif
+				    mc_addr(ha));
 			cnt--;
 			continue;
 		}
 
 		if (i == MRVDRV_MAX_MULTICAST_LIST_SIZE)
 			break;
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35))
-		memcpy(&cmd->maclist[6*i], ha->addr, ETH_ALEN);
-#else
-		memcpy(&cmd->maclist[6*i], ha->dmi_addr, ETH_ALEN);
-#endif
+		memcpy(&cmd->maclist[6*i], mc_addr(ha), ETH_ALEN);
 		lbs_deb_net("mcast address %s:%pM added to filter\n", dev->name,
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35))
-			    ha->addr);
-#else
-			    ha->dmi_addr);
-#endif
+			    mc_addr(ha));
 		i++;
 		cnt--;
 	}
@@ -1013,7 +997,7 @@ struct lbs_private *lbs_add_card(void *card, struct device *dmdev)
 	wdev->netdev = dev;
 	priv->dev = dev;
 
-	netdev_attach_ops(dev, &lbs_netdev_ops);
+ 	netdev_attach_ops(dev, &lbs_netdev_ops);
 	dev->watchdog_timeo = 5 * HZ;
 	dev->ethtool_ops = &lbs_ethtool_ops;
 	dev->flags |= IFF_BROADCAST | IFF_MULTICAST;

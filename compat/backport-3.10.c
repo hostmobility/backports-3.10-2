@@ -12,6 +12,8 @@
 #include <linux/module.h>
 #include <linux/err.h>
 #include <linux/proc_fs.h>
+#include <linux/random.h>
+#include <linux/tty.h>
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,6,0))
 #include <linux/init.h>
@@ -32,6 +34,7 @@
 #endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(3,6,0)) */
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,6,0))
+#ifdef CPTCFG_REGULATOR
 /**
  * regulator_map_voltage_ascend - map_voltage() for ascendant voltage list
  *
@@ -63,6 +66,7 @@ int regulator_map_voltage_ascend(struct regulator_dev *rdev,
 }
 EXPORT_SYMBOL_GPL(regulator_map_voltage_ascend);
 
+#endif /* CPTCFG_REGULATOR */
 #endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(3,6,0)) */
 
 void proc_set_size(struct proc_dir_entry *de, loff_t size)
@@ -77,3 +81,51 @@ void proc_set_user(struct proc_dir_entry *de, kuid_t uid, kgid_t gid)
 	de->gid = gid;
 }
 EXPORT_SYMBOL_GPL(proc_set_user);
+
+/* get_random_int() was not exported for module use until 3.10-rc.
+   Implement it here in terms of the more expensive get_random_bytes()
+ */
+unsigned int get_random_int(void)
+{
+	unsigned int r;
+	get_random_bytes(&r, sizeof(r));
+
+	return r;
+}
+EXPORT_SYMBOL_GPL(get_random_int);
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,28))
+#ifdef CONFIG_TTY
+/**
+ * tty_port_tty_wakeup - helper to wake up a tty
+ *
+ * @port: tty port
+ */
+void tty_port_tty_wakeup(struct tty_port *port)
+{
+	struct tty_struct *tty = tty_port_tty_get(port);
+
+	if (tty) {
+		tty_wakeup(tty);
+		tty_kref_put(tty);
+	}
+}
+EXPORT_SYMBOL_GPL(tty_port_tty_wakeup);
+
+/**
+ * tty_port_tty_hangup - helper to hang up a tty
+ *
+ * @port: tty port
+ * @check_clocal: hang only ttys with CLOCAL unset?
+ */
+void tty_port_tty_hangup(struct tty_port *port, bool check_clocal)
+{
+	struct tty_struct *tty = tty_port_tty_get(port);
+
+	if (tty && (!check_clocal || !C_CLOCAL(tty)))
+		tty_hangup(tty);
+	tty_kref_put(tty);
+}
+EXPORT_SYMBOL_GPL(tty_port_tty_hangup);
+#endif /* CONFIG_TTY */
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,28)) */

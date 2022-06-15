@@ -30,6 +30,7 @@
 #include "../wifi.h"
 #include "../core.h"
 #include "../pci.h"
+#include "../base.h"
 #include "reg.h"
 #include "def.h"
 #include "phy.h"
@@ -244,7 +245,7 @@ static struct rtl_hal_ops rtl8188ee_hal_ops = {
 	.set_bw_mode = rtl88e_phy_set_bw_mode,
 	.switch_channel = rtl88e_phy_sw_chnl,
 	.dm_watchdog = rtl88e_dm_watchdog,
-	.scan_operation_backup = rtl88e_phy_scan_operation_backup,
+	.scan_operation_backup = rtl_phy_scan_operation_backup,
 	.set_rf_power_state = rtl88e_phy_set_rf_power_state,
 	.led_control = rtl88ee_led_control,
 	.set_desc = rtl88ee_set_desc,
@@ -389,7 +390,6 @@ MODULE_PARM_DESC(debug, "Set debug level (0-5) (default 0)");
 
 compat_pci_suspend(rtl_pci_suspend);
 compat_pci_resume(rtl_pci_resume);
-
 static SIMPLE_DEV_PM_OPS(rtlwifi_pm_ops, rtl_pci_suspend, rtl_pci_resume);
 
 static struct pci_driver rtl88ee_driver = {
@@ -400,8 +400,8 @@ static struct pci_driver rtl88ee_driver = {
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,29))
 	.driver.pm = &rtlwifi_pm_ops,
 #elif defined(CONFIG_PM_SLEEP)
-	.suspend = rtl_pci_suspend,
-	.resume = rtl_pci_resume,
+	.suspend = rtl_pci_suspend_compat,
+	.resume = rtl_pci_resume_compat,
 #endif
 };
 

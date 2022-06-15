@@ -5,7 +5,7 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  *
- * Compatibility file for Linux wireless for kernels 2.6.34.
+ * Backport functionality introduced in Linux 2.6.34.
  */
 
 #include <linux/mmc/sdio_func.h>
@@ -23,11 +23,13 @@ mmc_pm_flag_t sdio_get_host_pm_caps(struct sdio_func *func)
 {
 	return backport_mmc_pm_flags;
 }
+EXPORT_SYMBOL_GPL(sdio_get_host_pm_caps);
 
 int sdio_set_host_pm_flags(struct sdio_func *func, mmc_pm_flag_t flags)
 {
 	return -EINVAL;
 }
+EXPORT_SYMBOL_GPL(sdio_set_host_pm_flags);
 
 /**
  * seq_hlist_start - start an iteration of a hlist

@@ -8,17 +8,6 @@
  */
 #include <linux/printk.h>
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25))
-/**
- * The following things are out of ./include/linux/kernel.h
- * The new iwlwifi driver is using them.
- */
-#define strict_strtoul LINUX_BACKPORT(strict_strtoul)
-extern int strict_strtoul(const char *, unsigned int, unsigned long *);
-#define strict_strtol LINUX_BACKPORT(strict_strtol)
-extern int strict_strtol(const char *, unsigned int, long *);
-#endif /* (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25)) */
-
 /*
  * This backports:
  *
@@ -29,26 +18,6 @@ extern int strict_strtol(const char *, unsigned int, long *);
  */
 #ifndef SIZE_MAX
 #define SIZE_MAX    (~(size_t)0)
-#endif
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
-extern const char hex_asc[];
-#endif
-
-#ifndef hex_asc_hi
-#define hex_asc_hi(x)	hex_asc[((x) & 0xf0) >> 4]
-#endif
-#ifndef hex_asc_lo
-#define hex_asc_lo(x)	hex_asc[((x) & 0x0f)]
-#endif
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,2,0)
-static inline char *hex_byte_pack(char *buf, u8 byte)
-{
-	*buf++ = hex_asc_hi(byte);
-	*buf++ = hex_asc_lo(byte);
-	return buf;
-}
 #endif
 
 /* This backports:
@@ -65,32 +34,46 @@ static inline char *hex_byte_pack(char *buf, u8 byte)
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,0,0)
+#define kstrtoull_from_user LINUX_BACKPORT(kstrtoull_from_user)
 int __must_check kstrtoull_from_user(const char __user *s, size_t count, unsigned int base, unsigned long long *res);
+#define kstrtoll_from_user LINUX_BACKPORT(kstrtoll_from_user)
 int __must_check kstrtoll_from_user(const char __user *s, size_t count, unsigned int base, long long *res);
+#define kstrtoul_from_user LINUX_BACKPORT(kstrtoul_from_user)
 int __must_check kstrtoul_from_user(const char __user *s, size_t count, unsigned int base, unsigned long *res);
+#define kstrtol_from_user LINUX_BACKPORT(kstrtol_from_user)
 int __must_check kstrtol_from_user(const char __user *s, size_t count, unsigned int base, long *res);
+#define kstrtouint_from_user LINUX_BACKPORT(kstrtouint_from_user)
 int __must_check kstrtouint_from_user(const char __user *s, size_t count, unsigned int base, unsigned int *res);
+#define kstrtoint_from_user LINUX_BACKPORT(kstrtoint_from_user)
 int __must_check kstrtoint_from_user(const char __user *s, size_t count, unsigned int base, int *res);
+#define kstrtou16_from_user LINUX_BACKPORT(kstrtou16_from_user)
 int __must_check kstrtou16_from_user(const char __user *s, size_t count, unsigned int base, u16 *res);
+#define kstrtos16_from_user LINUX_BACKPORT(kstrtos16_from_user)
 int __must_check kstrtos16_from_user(const char __user *s, size_t count, unsigned int base, s16 *res);
+#define kstrtou8_from_user LINUX_BACKPORT(kstrtou8_from_user)
 int __must_check kstrtou8_from_user(const char __user *s, size_t count, unsigned int base, u8 *res);
+#define kstrtos8_from_user LINUX_BACKPORT(kstrtos8_from_user)
 int __must_check kstrtos8_from_user(const char __user *s, size_t count, unsigned int base, s8 *res);
 
+#define kstrtou64_from_user LINUX_BACKPORT(kstrtou64_from_user)
 static inline int __must_check kstrtou64_from_user(const char __user *s, size_t count, unsigned int base, u64 *res)
 {
 	return kstrtoull_from_user(s, count, base, res);
 }
 
+#define kstrtos64_from_user LINUX_BACKPORT(kstrtos64_from_user)
 static inline int __must_check kstrtos64_from_user(const char __user *s, size_t count, unsigned int base, s64 *res)
 {
 	return kstrtoll_from_user(s, count, base, res);
 }
 
+#define kstrtou32_from_user LINUX_BACKPORT(kstrtou32_from_user)
 static inline int __must_check kstrtou32_from_user(const char __user *s, size_t count, unsigned int base, u32 *res)
 {
 	return kstrtouint_from_user(s, count, base, res);
 }
 
+#define kstrtos32_from_user LINUX_BACKPORT(kstrtos32_from_user)
 static inline int __must_check kstrtos32_from_user(const char __user *s, size_t count, unsigned int base, s32 *res)
 {
 	return kstrtoint_from_user(s, count, base, res);
@@ -105,11 +88,16 @@ static inline int __must_check kstrtos32_from_user(const char __user *s, size_t 
  */
 #ifndef strict_strtoull
 /* Internal, do not use. */
+#define _kstrtoul LINUX_BACKPORT(_kstrtoul)
 int __must_check _kstrtoul(const char *s, unsigned int base, unsigned long *res);
+#define _kstrtol LINUX_BACKPORT(_kstrtol)
 int __must_check _kstrtol(const char *s, unsigned int base, long *res);
 
+#define kstrtoull LINUX_BACKPORT(kstrtoull)
 int __must_check kstrtoull(const char *s, unsigned int base, unsigned long long *res);
+#define kstrtoll LINUX_BACKPORT(kstrtoll)
 int __must_check kstrtoll(const char *s, unsigned int base, long long *res);
+#define kstrtoul LINUX_BACKPORT(kstrtoul)
 static inline int __must_check kstrtoul(const char *s, unsigned int base, unsigned long *res)
 {
 	/*
@@ -123,6 +111,7 @@ static inline int __must_check kstrtoul(const char *s, unsigned int base, unsign
 		return _kstrtoul(s, base, res);
 }
 
+#define kstrtol LINUX_BACKPORT(kstrtol)
 static inline int __must_check kstrtol(const char *s, unsigned int base, long *res)
 {
 	/*
@@ -136,32 +125,42 @@ static inline int __must_check kstrtol(const char *s, unsigned int base, long *r
 		return _kstrtol(s, base, res);
 }
 
+#define kstrtouint LINUX_BACKPORT(kstrtouint)
 int __must_check kstrtouint(const char *s, unsigned int base, unsigned int *res);
+#define kstrtoint LINUX_BACKPORT(kstrtoint)
 int __must_check kstrtoint(const char *s, unsigned int base, int *res);
 
+#define kstrtou64 LINUX_BACKPORT(kstrtou64)
 static inline int __must_check kstrtou64(const char *s, unsigned int base, u64 *res)
 {
 	return kstrtoull(s, base, res);
 }
 
+#define kstrtos64 LINUX_BACKPORT(kstrtos64)
 static inline int __must_check kstrtos64(const char *s, unsigned int base, s64 *res)
 {
 	return kstrtoll(s, base, res);
 }
 
+#define kstrtou32 LINUX_BACKPORT(kstrtou32)
 static inline int __must_check kstrtou32(const char *s, unsigned int base, u32 *res)
 {
 	return kstrtouint(s, base, res);
 }
 
+#define kstrtos32 LINUX_BACKPORT(kstrtos32)
 static inline int __must_check kstrtos32(const char *s, unsigned int base, s32 *res)
 {
 	return kstrtoint(s, base, res);
 }
 
+#define kstrtou16 LINUX_BACKPORT(kstrtou16)
 int __must_check kstrtou16(const char *s, unsigned int base, u16 *res);
+#define kstrtos16 LINUX_BACKPORT(kstrtos16)
 int __must_check kstrtos16(const char *s, unsigned int base, s16 *res);
+#define kstrtou8 LINUX_BACKPORT(kstrtou8)
 int __must_check kstrtou8(const char *s, unsigned int base, u8 *res);
+#define kstrtos8 LINUX_BACKPORT(kstrtos8)
 int __must_check kstrtos8(const char *s, unsigned int base, s8 *res);
 #endif /* ifndef strict_strtol */
 
@@ -240,6 +239,21 @@ int hex_to_bin(char ch);
 	__val = __val < __min ? __min: __val;   \
 	__val > __max ? __max: __val; })
 #endif
+
+#ifndef rounddown
+#define rounddown(x, y) (				\
+{							\
+	typeof(x) __x = (x);				\
+	__x - (__x % (y));				\
+}							\
+)
+#endif /* rounddown */
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,2,0)
+/* kernels before 3.2 didn't have error checking for the function */
+#define hex2bin LINUX_BACKPORT(hex2bin)
+int __must_check hex2bin(u8 *dst, const char *src, size_t count);
+#endif /* < 3.2 */
 
 #endif /* __BACKPORT_KERNEL_H */
 

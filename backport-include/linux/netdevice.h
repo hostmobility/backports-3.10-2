@@ -115,13 +115,6 @@ extern void netdev_set_default_ethtool_ops(struct net_device *dev,
 					   const struct ethtool_ops *ops);
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25)
-#define __dev_addr_sync LINUX_BACKPORT(__dev_addr_sync)
-extern int __dev_addr_sync(struct dev_addr_list **to, int *to_count, struct dev_addr_list **from, int *from_count);
-#define __dev_addr_unsync LINUX_BACKPORT(__dev_addr_unsync)
-extern void __dev_addr_unsync(struct dev_addr_list **to, int *to_count, struct dev_addr_list **from, int *from_count);
-#endif
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,29)
 #define netdev_attach_ops LINUX_BACKPORT(netdev_attach_ops)
 void netdev_attach_ops(struct net_device *dev,
@@ -164,34 +157,40 @@ static inline int ndo_do_ioctl(struct net_device *dev,
  */
 #ifndef CONFIG_BQL
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,26))
+#define netdev_tx_sent_queue LINUX_BACKPORT(netdev_tx_sent_queue)
 static inline void netdev_tx_sent_queue(struct netdev_queue *dev_queue,
 					unsigned int bytes)
 {
 }
 #endif
 
+#define netdev_sent_queue LINUX_BACKPORT(netdev_sent_queue)
 static inline void netdev_sent_queue(struct net_device *dev, unsigned int bytes)
 {
 }
 
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,26))
+#define netdev_tx_completed_queue LINUX_BACKPORT(netdev_tx_completed_queue)
 static inline void netdev_tx_completed_queue(struct netdev_queue *dev_queue,
 					     unsigned pkts, unsigned bytes)
 {
 }
 #endif
 
+#define netdev_completed_queue LINUX_BACKPORT(netdev_completed_queue)
 static inline void netdev_completed_queue(struct net_device *dev,
 					  unsigned pkts, unsigned bytes)
 {
 }
 
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,26))
+#define netdev_tx_reset_queue LINUX_BACKPORT(netdev_tx_reset_queue)
 static inline void netdev_tx_reset_queue(struct netdev_queue *q)
 {
 }
 #endif
 
+#define netdev_reset_queue LINUX_BACKPORT(netdev_reset_queue)
 static inline void netdev_reset_queue(struct net_device *dev_queue)
 {
 }
@@ -233,6 +232,7 @@ static inline int register_netdevice_name(struct net_device *dev)
 #define net_ns_type_operations LINUX_BACKPORT(net_ns_type_operations)
 extern struct kobj_ns_type_operations net_ns_type_operations;
 
+#if (RHEL_RELEASE_CODE < RHEL_RELEASE_VERSION(6,4))
 #ifdef CONFIG_RPS
 extern int netif_set_real_num_rx_queues(struct net_device *dev,
 					unsigned int rxq);
@@ -242,6 +242,7 @@ static inline int netif_set_real_num_rx_queues(struct net_device *dev,
 {
 	return 0;
 }
+#endif
 #endif
 #endif /* < 2.6.37 */
 
@@ -260,6 +261,9 @@ static inline int netif_set_real_num_rx_queues(struct net_device *dev,
 #define netif_set_real_num_tx_queues LINUX_BACKPORT(netif_set_real_num_tx_queues)
 extern int netif_set_real_num_tx_queues(struct net_device *dev,
 					unsigned int txq);
+#define mc_addr(ha) (ha)->dmi_addr
+#else
+#define mc_addr(ha) (ha)->addr
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,34)
@@ -465,6 +469,18 @@ struct net *dev_net(const struct net_device *dev)
 	return &init_net;
 #endif
 }
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,11,0)
+#define netdev_notifier_info_to_dev(ndev) ndev
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,34) && \
+    LINUX_VERSION_CODE != KERNEL_VERSION(2,6,32)
+/* there is no equivalent function to update arp table */
+#define netdev_notify_peers(dev)
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(3,7,0)
+#define netdev_notify_peers(dev) netif_notify_peers(dev)
 #endif
 
 #endif /* __BACKPORT_NETDEVICE_H */

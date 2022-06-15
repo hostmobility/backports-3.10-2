@@ -29,6 +29,9 @@ struct ath6kl_sta *ath6kl_find_sta(struct ath6kl_vif *vif, u8 *node_addr)
 	struct ath6kl_sta *conn = NULL;
 	u8 i, max_conn;
 
+	if (is_zero_ether_addr(node_addr))
+		return NULL;
+
 	max_conn = (vif->nw_type == AP_NETWORK) ? AP_MAX_NUM_STA : 0;
 
 	for (i = 0; i < max_conn; i++) {
@@ -1207,11 +1210,7 @@ static void ath6kl_set_multicast_list(struct net_device *ndev)
 	list_for_each_entry_safe(mc_filter, tmp, &vif->mc_filter, list) {
 		found = false;
 		netdev_for_each_mc_addr(ha, ndev) {
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35))
-			if (memcmp(ha->addr, mc_filter->hw_addr,
-#else
-			if (memcmp(ha->dmi_addr, mc_filter->hw_addr,
-#endif
+			if (memcmp(mc_addr(ha), mc_filter->hw_addr,
 				   ATH6KL_MCAST_FILTER_MAC_ADDR_SIZE) == 0) {
 				found = true;
 				break;
@@ -1245,11 +1244,7 @@ static void ath6kl_set_multicast_list(struct net_device *ndev)
 	netdev_for_each_mc_addr(ha, ndev) {
 		found = false;
 		list_for_each_entry(mc_filter, &vif->mc_filter, list) {
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35))
-			if (memcmp(ha->addr, mc_filter->hw_addr,
-#else
-			if (memcmp(ha->dmi_addr, mc_filter->hw_addr,
-#endif
+			if (memcmp(mc_addr(ha), mc_filter->hw_addr,
 				   ATH6KL_MCAST_FILTER_MAC_ADDR_SIZE) == 0) {
 				found = true;
 				break;
@@ -1264,11 +1259,7 @@ static void ath6kl_set_multicast_list(struct net_device *ndev)
 				goto out;
 			}
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35))
-			memcpy(mc_filter->hw_addr, ha->addr,
-#else
-			memcpy(mc_filter->hw_addr, ha->dmi_addr,
-#endif
+			memcpy(mc_filter->hw_addr, mc_addr(ha),
 			       ATH6KL_MCAST_FILTER_MAC_ADDR_SIZE);
 			/* Set the multicast filter */
 			ath6kl_dbg(ATH6KL_DBG_TRC,

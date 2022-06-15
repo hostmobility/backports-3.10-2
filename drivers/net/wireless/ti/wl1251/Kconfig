@@ -2,7 +2,7 @@ menuconfig WL1251
 	depends on !BACKPORT_KERNEL_3_0
 	tristate "TI wl1251 driver support"
 	depends on m
-	depends on MAC80211 && GENERIC_HARDIRQS
+	depends on MAC80211
 	select BACKPORT_FW_LOADER
 	depends on CRC7
 	---help---

@@ -30,3 +30,4 @@ obj-$(CPTCFG_RC_LOOPBACK) += rc-loopback.o
 obj-$(CPTCFG_IR_GPIO_CIR) += gpio-ir-recv.o
 obj-$(CPTCFG_IR_IGUANA) += iguanair.o
 obj-$(CPTCFG_IR_TTUSBIR) += ttusbir.o
+obj-$(CPTCFG_RC_ST) += st_rc.o

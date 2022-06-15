@@ -43,10 +43,9 @@ config P54_PCI
 	  If you choose to build a module, it'll be called p54pci.
 
 config P54_SPI
-	depends on !BACKPORT_KERNEL_2_6_25
 	tristate "Prism54 SPI (stlc45xx) support"
 	depends on m
-	depends on P54_COMMON && SPI_MASTER && GENERIC_HARDIRQS
+	depends on P54_COMMON && SPI_MASTER
 	---help---
 	  This driver is for stlc4550 or stlc4560 based wireless chips
 	  such as Nokia's N800/N810 Portable Internet Tablet.

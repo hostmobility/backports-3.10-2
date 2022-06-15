@@ -193,23 +193,7 @@ int em28xx_write_regs_req(struct em28xx *dev, u8 req, u16 reg, char *buf,
 
 int em28xx_write_regs(struct em28xx *dev, u16 reg, char *buf, int len)
 {
-	int rc;
-
-	rc = em28xx_write_regs_req(dev, USB_REQ_GET_STATUS, reg, buf, len);
-
-	/* Stores GPO/GPIO values at the cache, if changed
-	   Only write values should be stored, since input on a GPIO
-	   register will return the input bits.
-	   Not sure what happens on reading GPO register.
-	 */
-	if (rc >= 0) {
-		if (reg == dev->reg_gpo_num)
-			dev->reg_gpo = buf[0];
-		else if (reg == dev->reg_gpio_num)
-			dev->reg_gpio = buf[0];
-	}
-
-	return rc;
+	return em28xx_write_regs_req(dev, USB_REQ_GET_STATUS, reg, buf, len);
 }
 EXPORT_SYMBOL_GPL(em28xx_write_regs);
 
@@ -231,14 +215,7 @@ int em28xx_write_reg_bits(struct em28xx *dev, u16 reg, u8 val,
 	int oldval;
 	u8 newval;
 
-	/* Uses cache for gpo/gpio registers */
-	if (reg == dev->reg_gpo_num)
-		oldval = dev->reg_gpo;
-	else if (reg == dev->reg_gpio_num)
-		oldval = dev->reg_gpio;
-	else
-		oldval = em28xx_read_reg(dev, reg);
-
+	oldval = em28xx_read_reg(dev, reg);
 	if (oldval < 0)
 		return oldval;
 
@@ -247,6 +224,25 @@ int em28xx_write_reg_bits(struct em28xx *dev, u16 reg, u8 val,
 	return em28xx_write_regs(dev, reg, &newval, 1);
 }
 EXPORT_SYMBOL_GPL(em28xx_write_reg_bits);
+
+/*
+ * em28xx_toggle_reg_bits()
+ * toggles/inverts the bits (specified by bitmask) of a register
+ */
+int em28xx_toggle_reg_bits(struct em28xx *dev, u16 reg, u8 bitmask)
+{
+	int oldval;
+	u8 newval;
+
+	oldval = em28xx_read_reg(dev, reg);
+	if (oldval < 0)
+		return oldval;
+
+	newval = (~oldval & bitmask) | (oldval & ~bitmask);
+
+	return em28xx_write_reg(dev, reg, newval);
+}
+EXPORT_SYMBOL_GPL(em28xx_toggle_reg_bits);
 
 /*
  * em28xx_is_ac97_ready()
@@ -505,8 +501,10 @@ int em28xx_audio_setup(struct em28xx *dev)
 	int vid1, vid2, feat, cfg;
 	u32 vid;
 
-	if (dev->chip_id == CHIP_ID_EM2870 || dev->chip_id == CHIP_ID_EM2874
-		|| dev->chip_id == CHIP_ID_EM28174) {
+	if (dev->chip_id == CHIP_ID_EM2870 ||
+	    dev->chip_id == CHIP_ID_EM2874 ||
+	    dev->chip_id == CHIP_ID_EM28174 ||
+	    dev->chip_id == CHIP_ID_EM28178) {
 		/* Digital only device - don't load any alsa module */
 		dev->audio_mode.has_audio = false;
 		dev->has_audio_class = false;
@@ -623,54 +621,77 @@ int em28xx_colorlevels_set_default(struct em28xx *dev)
 	return em28xx_write_reg(dev, EM28XX_R1A_BOFFSET, 0x00);
 }
 
+const struct em28xx_led *em28xx_find_led(struct em28xx *dev,
+					 enum em28xx_led_role role)
+{
+	if (dev->board.leds) {
+		u8 k = 0;
+		while (dev->board.leds[k].role >= 0 &&
+			       dev->board.leds[k].role < EM28XX_NUM_LED_ROLES) {
+			if (dev->board.leds[k].role == role)
+				return &dev->board.leds[k];
+			k++;
+		}
+	}
+	return NULL;
+}
+EXPORT_SYMBOL_GPL(em28xx_find_led);
+
 int em28xx_capture_start(struct em28xx *dev, int start)
 {
 	int rc;
 
 	if (dev->chip_id == CHIP_ID_EM2874 ||
 	    dev->chip_id == CHIP_ID_EM2884 ||
-	    dev->chip_id == CHIP_ID_EM28174) {
+	    dev->chip_id == CHIP_ID_EM28174 ||
+	    dev->chip_id == CHIP_ID_EM28178) {
 		/* The Transport Stream Enable Register moved in em2874 */
-		if (!start) {
-			rc = em28xx_write_reg_bits(dev, EM2874_R5F_TS_ENABLE,
-						   0x00,
-						   EM2874_TS1_CAPTURE_ENABLE);
-			return rc;
-		}
-
-		/* Enable Transport Stream */
 		rc = em28xx_write_reg_bits(dev, EM2874_R5F_TS_ENABLE,
-					   EM2874_TS1_CAPTURE_ENABLE,
+					   start ?
+					       EM2874_TS1_CAPTURE_ENABLE : 0x00,
 					   EM2874_TS1_CAPTURE_ENABLE);
-		return rc;
+	} else {
+		/* FIXME: which is the best order? */
+		/* video registers are sampled by VREF */
+		rc = em28xx_write_reg_bits(dev, EM28XX_R0C_USBSUSP,
+					   start ? 0x10 : 0x00, 0x10);
+		if (rc < 0)
+			return rc;
+
+		if (start) {
+			if (dev->board.is_webcam)
+				rc = em28xx_write_reg(dev, 0x13, 0x0c);
+
+			/* Enable video capture */
+			rc = em28xx_write_reg(dev, 0x48, 0x00);
+
+			if (dev->mode == EM28XX_ANALOG_MODE)
+				rc = em28xx_write_reg(dev,
+						    EM28XX_R12_VINENABLE, 0x67);
+			else
+				rc = em28xx_write_reg(dev,
+						    EM28XX_R12_VINENABLE, 0x37);
+
+			msleep(6);
+		} else {
+			/* disable video capture */
+			rc = em28xx_write_reg(dev, EM28XX_R12_VINENABLE, 0x27);
+		}
 	}
 
-
-	/* FIXME: which is the best order? */
-	/* video registers are sampled by VREF */
-	rc = em28xx_write_reg_bits(dev, EM28XX_R0C_USBSUSP,
-				   start ? 0x10 : 0x00, 0x10);
 	if (rc < 0)
 		return rc;
 
-	if (!start) {
-		/* disable video capture */
-		rc = em28xx_write_reg(dev, EM28XX_R12_VINENABLE, 0x27);
-		return rc;
+	/* Switch (explicitly controlled) analog capturing LED on/off */
+	if (dev->mode == EM28XX_ANALOG_MODE) {
+		const struct em28xx_led *led;
+		led = em28xx_find_led(dev, EM28XX_LED_ANALOG_CAPTURING);
+		if (led)
+			em28xx_write_reg_bits(dev, led->gpio_reg,
+					      (!start ^ led->inverted) ?
+					      ~led->gpio_mask : led->gpio_mask,
+					      led->gpio_mask);
 	}
-
-	if (dev->board.is_webcam)
-		rc = em28xx_write_reg(dev, 0x13, 0x0c);
-
-	/* enable video capture */
-	rc = em28xx_write_reg(dev, 0x48, 0x00);
-
-	if (dev->mode == EM28XX_ANALOG_MODE)
-		rc = em28xx_write_reg(dev, EM28XX_R12_VINENABLE, 0x67);
-	else
-		rc = em28xx_write_reg(dev, EM28XX_R12_VINENABLE, 0x37);
-
-	msleep(6);
 
 	return rc;
 }

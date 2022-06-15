@@ -2698,7 +2698,7 @@ static u16 eeprom_read_u16(struct ipw_priv *priv, u8 addr)
 /* data's copy of the eeprom data                                 */
 static void eeprom_parse_mac(struct ipw_priv *priv, u8 * mac)
 {
-	memcpy(mac, &priv->eeprom[EEPROM_MAC_ADDRESS], 6);
+	memcpy(mac, &priv->eeprom[EEPROM_MAC_ADDRESS], ETH_ALEN);
 }
 
 static void ipw_read_eeprom(struct ipw_priv *priv)
@@ -3548,6 +3548,7 @@ static int ipw_load(struct ipw_priv *priv)
 		ipw_rx_queue_reset(priv, priv->rxq);
 	if (!priv->rxq) {
 		IPW_ERROR("Unable to initialize Rx queue\n");
+		rc = -ENOMEM;
 		goto error;
 	}
 
@@ -8256,7 +8257,7 @@ static  int is_duplicate_packet(struct ipw_priv *priv,
 			u8 *mac = header->addr2;
 			int index = mac[5] % IPW_IBSS_MAC_HASH_SIZE;
 
-			__list_for_each(p, &priv->ibss_mac_hash[index]) {
+			list_for_each(p, &priv->ibss_mac_hash[index]) {
 				entry =
 				    list_entry(p, struct ipw_ibss_seq, list);
 				if (!memcmp(entry->mac, mac, ETH_ALEN))
@@ -11471,10 +11472,10 @@ static int ipw_wdev_init(struct net_device *dev)
 			bg_band->channels[i].max_power = geo->bg[i].max_power;
 			if (geo->bg[i].flags & LIBIPW_CH_PASSIVE_ONLY)
 				bg_band->channels[i].flags |=
-					IEEE80211_CHAN_PASSIVE_SCAN;
+					IEEE80211_CHAN_NO_IR;
 			if (geo->bg[i].flags & LIBIPW_CH_NO_IBSS)
 				bg_band->channels[i].flags |=
-					IEEE80211_CHAN_NO_IBSS;
+					IEEE80211_CHAN_NO_IR;
 			if (geo->bg[i].flags & LIBIPW_CH_RADAR_DETECT)
 				bg_band->channels[i].flags |=
 					IEEE80211_CHAN_RADAR;
@@ -11510,10 +11511,10 @@ static int ipw_wdev_init(struct net_device *dev)
 			a_band->channels[i].max_power = geo->a[i].max_power;
 			if (geo->a[i].flags & LIBIPW_CH_PASSIVE_ONLY)
 				a_band->channels[i].flags |=
-					IEEE80211_CHAN_PASSIVE_SCAN;
+					IEEE80211_CHAN_NO_IR;
 			if (geo->a[i].flags & LIBIPW_CH_NO_IBSS)
 				a_band->channels[i].flags |=
-					IEEE80211_CHAN_NO_IBSS;
+					IEEE80211_CHAN_NO_IR;
 			if (geo->a[i].flags & LIBIPW_CH_RADAR_DETECT)
 				a_band->channels[i].flags |=
 					IEEE80211_CHAN_RADAR;
@@ -11884,7 +11885,6 @@ static int ipw_pci_probe(struct pci_dev *pdev,
 	pci_release_regions(pdev);
       out_pci_disable_device:
 	pci_disable_device(pdev);
-	pci_set_drvdata(pdev, NULL);
       out_free_libipw:
 	free_libipw(priv->net_dev, 0);
       out:
@@ -11965,7 +11965,6 @@ static void ipw_pci_remove(struct pci_dev *pdev)
 	iounmap(priv->hw_base);
 	pci_release_regions(pdev);
 	pci_disable_device(pdev);
-	pci_set_drvdata(pdev, NULL);
 	/* wiphy_unregister needs to be here, before free_libipw */
 	wiphy_unregister(priv->ieee->wdev.wiphy);
 	kfree(priv->ieee->a_band.channels);

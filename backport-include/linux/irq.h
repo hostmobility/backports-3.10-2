@@ -16,10 +16,12 @@ static inline int irq_set_chip_data(unsigned int irq, void *data)
 {
 	return set_irq_chip_data(irq, data);
 }
+#ifndef irq_set_irq_type
 static inline int irq_set_irq_type(unsigned int irq, unsigned int type)
 {
 	return set_irq_type(irq, type);
 }
+#endif
 static inline int irq_set_msi_desc(unsigned int irq, struct msi_desc *entry)
 {
 	return set_irq_msi(irq, entry);
@@ -49,7 +51,6 @@ static inline struct msi_desc *irq_get_msi_desc(unsigned int irq)
 	return get_irq_msi(irq);
 }
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,25))
 static inline void irq_set_noprobe(unsigned int irq)
 {
 	set_irq_noprobe(irq);
@@ -58,7 +59,6 @@ static inline void irq_set_probe(unsigned int irq)
 {
 	set_irq_probe(irq);
 }
-#endif
 #endif
 
 /* This is really in irqdesc.h, but nothing includes that directly */

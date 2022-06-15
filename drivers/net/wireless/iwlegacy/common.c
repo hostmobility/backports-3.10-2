@@ -540,7 +540,6 @@ il_led_brightness_set(struct led_classdev *led_cdev,
 	il_led_cmd(il, on, 0);
 }
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,25))
 static int
 il_led_blink_set(struct led_classdev *led_cdev, unsigned long *delay_on,
 		 unsigned long *delay_off)
@@ -549,7 +548,6 @@ il_led_blink_set(struct led_classdev *led_cdev, unsigned long *delay_on,
 
 	return il_led_cmd(il, *delay_on, *delay_off);
 }
-#endif
 
 void
 il_leds_init(struct il_priv *il)
@@ -563,9 +561,7 @@ il_leds_init(struct il_priv *il)
 	il->led.name =
 	    kasprintf(GFP_KERNEL, "%s-led", wiphy_name(il->hw->wiphy));
 	il->led.brightness_set = il_led_brightness_set;
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,25))
 	il->led.blink_set = il_led_blink_set;
-#endif
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,30)
 	il->led.max_brightness = 1;
 #endif
@@ -3451,10 +3447,10 @@ il_init_geos(struct il_priv *il)
 
 		if (il_is_channel_valid(ch)) {
 			if (!(ch->flags & EEPROM_CHANNEL_IBSS))
-				geo_ch->flags |= IEEE80211_CHAN_NO_IBSS;
+				geo_ch->flags |= IEEE80211_CHAN_NO_IR;
 
 			if (!(ch->flags & EEPROM_CHANNEL_ACTIVE))
-				geo_ch->flags |= IEEE80211_CHAN_PASSIVE_SCAN;
+				geo_ch->flags |= IEEE80211_CHAN_NO_IR;
 
 			if (ch->flags & EEPROM_CHANNEL_RADAR)
 				geo_ch->flags |= IEEE80211_CHAN_RADAR;
@@ -4666,6 +4662,7 @@ il_force_reset(struct il_priv *il, bool external)
 
 	return 0;
 }
+EXPORT_SYMBOL(il_force_reset);
 
 int
 il_mac_change_interface(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
@@ -4941,11 +4938,9 @@ il_pci_resume(struct device *device)
 	return 0;
 }
 
-compat_pci_suspend(il_pci_suspend)
-compat_pci_resume(il_pci_resume)
-
+compat_pci_suspend(il_pci_suspend);
+compat_pci_resume(il_pci_resume);
 SIMPLE_DEV_PM_OPS(il_pm_ops, il_pci_suspend, il_pci_resume);
-
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,29))
 EXPORT_SYMBOL(il_pm_ops);
 #else
@@ -5320,6 +5315,17 @@ il_mac_bss_info_changed(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 
 	if (changes & BSS_CHANGED_BSSID) {
 		D_MAC80211("BSSID %pM\n", bss_conf->bssid);
+
+		/*
+		 * On passive channel we wait with blocked queues to see if
+		 * there is traffic on that channel. If no frame will be
+		 * received (what is very unlikely since scan detects AP on
+		 * that channel, but theoretically possible), mac80211 associate
+		 * procedure will time out and mac80211 will call us with NULL
+		 * bssid. We have to unblock queues on such condition.
+		 */
+		if (is_zero_ether_addr(bss_conf->bssid))
+			il_wake_queues_by_reason(il, IL_STOP_REASON_PASSIVE);
 
 		/*
 		 * If there is currently a HW scan going on in the background,

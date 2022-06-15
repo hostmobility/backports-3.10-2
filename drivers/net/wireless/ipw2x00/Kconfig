@@ -177,7 +177,6 @@ config LIBIPW
 	mac80211 component.
 
 config LIBIPW_DEBUG
-	depends on !BACKPORT_KERNEL_2_6_25
 	bool "Full debugging output for the LIBIPW component"
 	depends on LIBIPW
 	---help---

@@ -145,9 +145,11 @@ static void atl1c_reset_pcie(struct atl1c_hw *hw, u32 flag)
 	 * Mask some pcie error bits
 	 */
 	pos = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_ERR);
-	pci_read_config_dword(pdev, pos + PCI_ERR_UNCOR_SEVER, &data);
-	data &= ~(PCI_ERR_UNC_DLP | PCI_ERR_UNC_FCP);
-	pci_write_config_dword(pdev, pos + PCI_ERR_UNCOR_SEVER, data);
+	if (pos) {
+		pci_read_config_dword(pdev, pos + PCI_ERR_UNCOR_SEVER, &data);
+		data &= ~(PCI_ERR_UNC_DLP | PCI_ERR_UNC_FCP);
+		pci_write_config_dword(pdev, pos + PCI_ERR_UNCOR_SEVER, data);
+	}
 	/* clear error status */
 	pcie_capability_write_word(pdev, PCI_EXP_DEVSTA,
 			PCI_EXP_DEVSTA_NFED |
@@ -410,11 +412,7 @@ static void atl1c_set_multi(struct net_device *netdev)
 
 	/* comoute mc addresses' hash value ,and put it into hash table */
 	netdev_for_each_mc_addr(ha, netdev) {
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35))
-		hash_value = atl1c_hash_mc_addr(hw, ha->addr);
-#else
-		hash_value = atl1c_hash_mc_addr(hw, ha->dmi_addr);
-#endif
+		hash_value = atl1c_hash_mc_addr(hw, mc_addr(ha));
 		atl1c_hash_set(hw, hash_value);
 	}
 }
@@ -485,10 +483,15 @@ static int atl1c_set_mac_addr(struct net_device *netdev, void *p)
 static void atl1c_set_rxbufsize(struct atl1c_adapter *adapter,
 				struct net_device *dev)
 {
+	unsigned int head_size;
 	int mtu = dev->mtu;
 
 	adapter->rx_buffer_len = mtu > AT_RX_BUF_SIZE ?
 		roundup(mtu + ETH_HLEN + ETH_FCS_LEN + VLAN_HLEN, 8) : AT_RX_BUF_SIZE;
+
+	head_size = SKB_DATA_ALIGN(adapter->rx_buffer_len + NET_SKB_PAD) +
+		    SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
+	adapter->rx_frag_size = roundup_pow_of_two(head_size);
 }
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,39))
@@ -968,6 +971,10 @@ static void atl1c_free_ring_resources(struct atl1c_adapter *adapter)
 	if (adapter->tpd_ring[0].buffer_info) {
 		kfree(adapter->tpd_ring[0].buffer_info);
 		adapter->tpd_ring[0].buffer_info = NULL;
+	}
+	if (adapter->rx_page) {
+		put_page(adapter->rx_page);
+		adapter->rx_page = NULL;
 	}
 }
 
@@ -1656,6 +1663,35 @@ static inline void atl1c_rx_checksum(struct atl1c_adapter *adapter,
 	skb_checksum_none_assert(skb);
 }
 
+static struct sk_buff *atl1c_alloc_skb(struct atl1c_adapter *adapter)
+{
+	struct sk_buff *skb;
+	struct page *page;
+
+	if (adapter->rx_frag_size > PAGE_SIZE)
+		return netdev_alloc_skb(adapter->netdev,
+					adapter->rx_buffer_len);
+
+	page = adapter->rx_page;
+	if (!page) {
+		adapter->rx_page = page = alloc_page(GFP_ATOMIC);
+		if (unlikely(!page))
+			return NULL;
+		adapter->rx_page_offset = 0;
+	}
+
+	skb = build_skb(page_address(page) + adapter->rx_page_offset,
+			adapter->rx_frag_size);
+	if (likely(skb)) {
+		adapter->rx_page_offset += adapter->rx_frag_size;
+		if (adapter->rx_page_offset >= PAGE_SIZE)
+			adapter->rx_page = NULL;
+		else
+			get_page(page);
+	}
+	return skb;
+}
+
 static int atl1c_alloc_rx_buffer(struct atl1c_adapter *adapter)
 {
 	struct atl1c_rfd_ring *rfd_ring = &adapter->rfd_ring;
@@ -1677,7 +1713,7 @@ static int atl1c_alloc_rx_buffer(struct atl1c_adapter *adapter)
 	while (next_info->flags & ATL1C_BUFFER_FREE) {
 		rfd_desc = ATL1C_RFD_DESC(rfd_ring, rfd_next_to_use);
 
-		skb = netdev_alloc_skb(adapter->netdev, adapter->rx_buffer_len);
+		skb = atl1c_alloc_skb(adapter);
 		if (unlikely(!skb)) {
 			if (netif_msg_rx_err(adapter))
 				dev_warn(&pdev->dev, "alloc rx buffer failed\n");
@@ -2773,9 +2809,8 @@ static const struct pci_error_handlers atl1c_err_handler = {
 	.resume = atl1c_io_resume,
 };
 
-compat_pci_suspend(atl1c_suspend)
-compat_pci_resume(atl1c_resume)
-
+compat_pci_suspend(atl1c_suspend);
+compat_pci_resume(atl1c_resume);
 static SIMPLE_DEV_PM_OPS(atl1c_pm_ops, atl1c_suspend, atl1c_resume);
 
 static struct pci_driver atl1c_driver = {
@@ -2788,32 +2823,9 @@ static struct pci_driver atl1c_driver = {
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,29))
 	.driver.pm = &atl1c_pm_ops,
 #elif defined(CONFIG_PM_SLEEP)
-	.suspend        = atl1c_suspend_compat,
-	.resume         = atl1c_resume_compat,
+	.suspend = atl1c_suspend_compat,
+	.resume = atl1c_resume_compat,
 #endif
 };
 
-/**
- * atl1c_init_module - Driver Registration Routine
- *
- * atl1c_init_module is the first routine called when the driver is
- * loaded. All it does is register with the PCI subsystem.
- */
-static int __init atl1c_init_module(void)
-{
-	return pci_register_driver(&atl1c_driver);
-}
-
-/**
- * atl1c_exit_module - Driver Exit Cleanup Routine
- *
- * atl1c_exit_module is called just before the driver is removed
- * from memory.
- */
-static void __exit atl1c_exit_module(void)
-{
-	pci_unregister_driver(&atl1c_driver);
-}
-
-module_init(atl1c_init_module);
-module_exit(atl1c_exit_module);
+module_pci_driver(atl1c_driver);

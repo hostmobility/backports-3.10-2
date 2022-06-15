@@ -22,9 +22,11 @@ config SUNGEM_PHY
 #source "drivers/net/ethernet/3com/Kconfig"
 #source "drivers/net/ethernet/adaptec/Kconfig"
 #source "drivers/net/ethernet/aeroflex/Kconfig"
+#source "drivers/net/ethernet/allwinner/Kconfig"
 #source "drivers/net/ethernet/alteon/Kconfig"
 #source "drivers/net/ethernet/amd/Kconfig"
 #source "drivers/net/ethernet/apple/Kconfig"
+#source "drivers/net/ethernet/arc/Kconfig"
 source "drivers/net/ethernet/atheros/Kconfig"
 #source "drivers/net/ethernet/cadence/Kconfig"
 #source "drivers/net/ethernet/adi/Kconfig"
@@ -69,7 +71,6 @@ config JME
 	depends on m
 	depends on PCI
 	depends on CRC32
-	select NET_CORE
 	select BACKPORT_MII
 	---help---
 	  This driver supports the PCI-Express gigabit ethernet adapters
@@ -99,6 +100,7 @@ config LANTIQ_ETOP
 #source "drivers/net/ethernet/mellanox/Kconfig"
 #source "drivers/net/ethernet/micrel/Kconfig"
 #source "drivers/net/ethernet/microchip/Kconfig"
+#source "drivers/net/ethernet/moxa/Kconfig"
 #source "drivers/net/ethernet/myricom/Kconfig"
 
 config FEALNX
@@ -107,7 +109,6 @@ config FEALNX
 	depends on m
 	depends on PCI
 	depends on CRC32
-	select NET_CORE
 	select BACKPORT_MII
 	---help---
 	  Say Y here to support the Myson MTD-800 family of PCI-based Ethernet
@@ -120,7 +121,6 @@ config NET_NETX
 	depends on n
 	tristate "NetX Ethernet support"
 	depends on m
-	select NET_CORE
 	select BACKPORT_MII
 	depends on ARCH_NETX
 	---help---
@@ -140,7 +140,6 @@ config ETHOC
 	tristate "OpenCores 10/100 Mbps Ethernet MAC support"
 	depends on m
 	depends on HAS_IOMEM && HAS_DMA
-	select NET_CORE
 	select BACKPORT_MII
 	depends on PHYLIB
 	depends on CRC32

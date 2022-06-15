@@ -17,6 +17,8 @@
 #include <linux/io.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/time.h>
+#include <linux/bitops.h>
 #include <asm/unaligned.h>
 
 #include "hw.h"
@@ -83,76 +85,33 @@ static void ath9k_hw_ani_cache_ini_regs(struct ath_hw *ah)
 
 #ifdef CPTCFG_ATH9K_DEBUGFS
 
-void ath9k_debug_sync_cause(struct ath_common *common, u32 sync_cause)
-{
-	struct ath_softc *sc = common->priv;
-	if (sync_cause)
-		sc->debug.stats.istats.sync_cause_all++;
-	if (sync_cause & AR_INTR_SYNC_RTC_IRQ)
-		sc->debug.stats.istats.sync_rtc_irq++;
-	if (sync_cause & AR_INTR_SYNC_MAC_IRQ)
-		sc->debug.stats.istats.sync_mac_irq++;
-	if (sync_cause & AR_INTR_SYNC_EEPROM_ILLEGAL_ACCESS)
-		sc->debug.stats.istats.eeprom_illegal_access++;
-	if (sync_cause & AR_INTR_SYNC_APB_TIMEOUT)
-		sc->debug.stats.istats.apb_timeout++;
-	if (sync_cause & AR_INTR_SYNC_PCI_MODE_CONFLICT)
-		sc->debug.stats.istats.pci_mode_conflict++;
-	if (sync_cause & AR_INTR_SYNC_HOST1_FATAL)
-		sc->debug.stats.istats.host1_fatal++;
-	if (sync_cause & AR_INTR_SYNC_HOST1_PERR)
-		sc->debug.stats.istats.host1_perr++;
-	if (sync_cause & AR_INTR_SYNC_TRCV_FIFO_PERR)
-		sc->debug.stats.istats.trcv_fifo_perr++;
-	if (sync_cause & AR_INTR_SYNC_RADM_CPL_EP)
-		sc->debug.stats.istats.radm_cpl_ep++;
-	if (sync_cause & AR_INTR_SYNC_RADM_CPL_DLLP_ABORT)
-		sc->debug.stats.istats.radm_cpl_dllp_abort++;
-	if (sync_cause & AR_INTR_SYNC_RADM_CPL_TLP_ABORT)
-		sc->debug.stats.istats.radm_cpl_tlp_abort++;
-	if (sync_cause & AR_INTR_SYNC_RADM_CPL_ECRC_ERR)
-		sc->debug.stats.istats.radm_cpl_ecrc_err++;
-	if (sync_cause & AR_INTR_SYNC_RADM_CPL_TIMEOUT)
-		sc->debug.stats.istats.radm_cpl_timeout++;
-	if (sync_cause & AR_INTR_SYNC_LOCAL_TIMEOUT)
-		sc->debug.stats.istats.local_timeout++;
-	if (sync_cause & AR_INTR_SYNC_PM_ACCESS)
-		sc->debug.stats.istats.pm_access++;
-	if (sync_cause & AR_INTR_SYNC_MAC_AWAKE)
-		sc->debug.stats.istats.mac_awake++;
-	if (sync_cause & AR_INTR_SYNC_MAC_ASLEEP)
-		sc->debug.stats.istats.mac_asleep++;
-	if (sync_cause & AR_INTR_SYNC_MAC_SLEEP_ACCESS)
-		sc->debug.stats.istats.mac_sleep_access++;
-}
 #endif
 
 
 static void ath9k_hw_set_clockrate(struct ath_hw *ah)
 {
-	struct ieee80211_conf *conf = &ath9k_hw_common(ah)->hw->conf;
 	struct ath_common *common = ath9k_hw_common(ah);
+	struct ath9k_channel *chan = ah->curchan;
 	unsigned int clockrate;
 
 	/* AR9287 v1.3+ uses async FIFO and runs the MAC at 117 MHz */
 	if (AR_SREV_9287(ah) && AR_SREV_9287_13_OR_LATER(ah))
 		clockrate = 117;
-	else if (!ah->curchan) /* should really check for CCK instead */
+	else if (!chan) /* should really check for CCK instead */
 		clockrate = ATH9K_CLOCK_RATE_CCK;
-	else if (conf->chandef.chan->band == IEEE80211_BAND_2GHZ)
+	else if (IS_CHAN_2GHZ(chan))
 		clockrate = ATH9K_CLOCK_RATE_2GHZ_OFDM;
 	else if (ah->caps.hw_caps & ATH9K_HW_CAP_FASTCLOCK)
 		clockrate = ATH9K_CLOCK_FAST_RATE_5GHZ_OFDM;
 	else
 		clockrate = ATH9K_CLOCK_RATE_5GHZ_OFDM;
 
-	if (conf_is_ht40(conf))
-		clockrate *= 2;
-
-	if (ah->curchan) {
-		if (IS_CHAN_HALF_RATE(ah->curchan))
+	if (chan) {
+		if (IS_CHAN_HT40(chan))
+			clockrate *= 2;
+		if (IS_CHAN_HALF_RATE(chan))
 			clockrate /= 2;
-		if (IS_CHAN_QUARTER_RATE(ah->curchan))
+		if (IS_CHAN_QUARTER_RATE(chan))
 			clockrate /= 4;
 	}
 
@@ -190,10 +149,7 @@ EXPORT_SYMBOL(ath9k_hw_wait);
 void ath9k_hw_synth_delay(struct ath_hw *ah, struct ath9k_channel *chan,
 			  int hw_delay)
 {
-	if (IS_CHAN_B(chan))
-		hw_delay = (4 * hw_delay) / 22;
-	else
-		hw_delay /= 10;
+	hw_delay /= 10;
 
 	if (IS_CHAN_HALF_RATE(chan))
 		hw_delay *= 2;
@@ -294,8 +250,7 @@ void ath9k_hw_get_channel_centers(struct ath_hw *ah,
 		return;
 	}
 
-	if ((chan->chanmode == CHANNEL_A_HT40PLUS) ||
-	    (chan->chanmode == CHANNEL_G_HT40PLUS)) {
+	if (IS_CHAN_HT40PLUS(chan)) {
 		centers->synth_center =
 			chan->channel + HT40_CHANNEL_CENTER_SHIFT;
 		extoff = 1;
@@ -442,25 +397,13 @@ static bool ath9k_hw_chip_test(struct ath_hw *ah)
 
 static void ath9k_hw_init_config(struct ath_hw *ah)
 {
-	int i;
-
 	ah->config.dma_beacon_response_time = 1;
 	ah->config.sw_beacon_response_time = 6;
-	ah->config.additional_swba_backoff = 0;
 	ah->config.ack_6mb = 0x0;
 	ah->config.cwm_ignore_extcca = 0;
-	ah->config.pcie_clock_req = 0;
-	ah->config.pcie_waen = 0;
 	ah->config.analog_shiftreg = 1;
-	ah->config.enable_ani = true;
-
-	for (i = 0; i < AR_EEPROM_MODAL_SPURS; i++) {
-		ah->config.spurchans[i][0] = AR_NO_SPUR;
-		ah->config.spurchans[i][1] = AR_NO_SPUR;
-	}
 
 	ah->config.rx_intr_mitigation = true;
-	ah->config.pcieSerDesWrite = true;
 
 	/*
 	 * We need this for PCI devices only (Cardbus, PCI, miniPCI)
@@ -492,7 +435,6 @@ static void ath9k_hw_init_defaults(struct ath_hw *ah)
 	ah->hw_version.magic = AR5416_MAGIC;
 	ah->hw_version.subvendorid = 0;
 
-	ah->atim_window = 0;
 	ah->sta_id1_defaults =
 		AR_STA_ID1_CRPT_MIC_ENABLE |
 		AR_STA_ID1_MCAST_KSRCH;
@@ -549,8 +491,19 @@ static int ath9k_hw_post_init(struct ath_hw *ah)
 		ah->eep_ops->get_eeprom_ver(ah),
 		ah->eep_ops->get_eeprom_rev(ah));
 
-	if (ah->config.enable_ani)
-		ath9k_hw_ani_init(ah);
+	ath9k_hw_ani_init(ah);
+
+	/*
+	 * EEPROM needs to be initialized before we do this.
+	 * This is required for regulatory compliance.
+	 */
+	if (AR_SREV_9300_20_OR_LATER(ah)) {
+		u16 regdmn = ah->eep_ops->get_eeprom(ah, EEP_REG_0);
+		if ((regdmn & 0xF0) == CTL_FCC) {
+			ah->nf_2g.max = AR_PHY_CCA_MAX_GOOD_VAL_9300_FCC_2GHZ;
+			ah->nf_5g.max = AR_PHY_CCA_MAX_GOOD_VAL_9300_FCC_5GHZ;
+		}
+	}
 
 	return 0;
 }
@@ -577,17 +530,16 @@ static int __ath9k_hw_init(struct ath_hw *ah)
 	 * We need to do this to avoid RMW of this register. We cannot
 	 * read the reg when chip is asleep.
 	 */
-	ah->WARegVal = REG_READ(ah, AR_WA);
-	ah->WARegVal |= (AR_WA_D3_L1_DISABLE |
-			 AR_WA_ASPM_TIMER_BASED_DISABLE);
+	if (AR_SREV_9300_20_OR_LATER(ah)) {
+		ah->WARegVal = REG_READ(ah, AR_WA);
+		ah->WARegVal |= (AR_WA_D3_L1_DISABLE |
+				 AR_WA_ASPM_TIMER_BASED_DISABLE);
+	}
 
 	if (!ath9k_hw_set_reset_reg(ah, ATH9K_RESET_POWER_ON)) {
 		ath_err(common, "Couldn't reset chip\n");
 		return -EIO;
 	}
-
-	if (AR_SREV_9462(ah))
-		ah->WARegVal &= ~AR_WA_D3_L1_DISABLE;
 
 	if (AR_SREV_9565(ah)) {
 		ah->WARegVal |= AR_WA_BIT22;
@@ -658,8 +610,6 @@ static int __ath9k_hw_init(struct ath_hw *ah)
 	ath9k_hw_init_cal_settings(ah);
 
 	ah->ani_function = ATH9K_ANI_ALL;
-	if (AR_SREV_9280_20_OR_LATER(ah) && !AR_SREV_9300_20_OR_LATER(ah))
-		ah->ani_function &= ~ATH9K_ANI_NOISE_IMMUNITY_LEVEL;
 	if (!AR_SREV_9300_20_OR_LATER(ah))
 		ah->ani_function &= ~ATH9K_ANI_MRC_CCK;
 
@@ -1036,7 +986,6 @@ static bool ath9k_hw_set_global_txtimeout(struct ath_hw *ah, u32 tu)
 void ath9k_hw_init_global_settings(struct ath_hw *ah)
 {
 	struct ath_common *common = ath9k_hw_common(ah);
-	struct ieee80211_conf *conf = &common->hw->conf;
 	const struct ath9k_channel *chan = ah->curchan;
 	int acktimeout, ctstimeout, ack_offset = 0;
 	int slottime;
@@ -1071,7 +1020,7 @@ void ath9k_hw_init_global_settings(struct ath_hw *ah)
 		if (IS_CHAN_A_FAST_CLOCK(ah, chan))
 		    tx_lat += 11;
 
-		sifstime *= 2;
+		sifstime = 32;
 		ack_offset = 16;
 		slottime = 13;
 	} else if (IS_CHAN_QUARTER_RATE(chan)) {
@@ -1081,7 +1030,7 @@ void ath9k_hw_init_global_settings(struct ath_hw *ah)
 		if (IS_CHAN_A_FAST_CLOCK(ah, chan))
 		    tx_lat += 22;
 
-		sifstime *= 4;
+		sifstime = 64;
 		ack_offset = 32;
 		slottime = 21;
 	} else {
@@ -1111,13 +1060,11 @@ void ath9k_hw_init_global_settings(struct ath_hw *ah)
 	 * BA frames in some implementations, but it has been found to fix ACK
 	 * timeout issues in other cases as well.
 	 */
-	if (conf->chandef.chan &&
-	    conf->chandef.chan->band == IEEE80211_BAND_2GHZ &&
+	if (IS_CHAN_2GHZ(chan) &&
 	    !IS_CHAN_HALF_RATE(chan) && !IS_CHAN_QUARTER_RATE(chan)) {
 		acktimeout += 64 - sifstime - ah->slottime;
 		ctstimeout += 48 - sifstime - ah->slottime;
 	}
-
 
 	ath9k_hw_set_sifs_time(ah, sifstime);
 	ath9k_hw_setslottime(ah, slottime);
@@ -1155,9 +1102,7 @@ u32 ath9k_regd_get_ctl(struct ath_regulatory *reg, struct ath9k_channel *chan)
 {
 	u32 ctl = ath_regd_get_band_ctl(reg, chan->chan->band);
 
-	if (IS_CHAN_B(chan))
-		ctl |= CTL_11B;
-	else if (IS_CHAN_G(chan))
+	if (IS_CHAN_2GHZ(chan))
 		ctl |= CTL_11G;
 	else
 		ctl |= CTL_11A;
@@ -1250,10 +1195,10 @@ static void ath9k_hw_set_operating_mode(struct ath_hw *ah, int opmode)
 
 	switch (opmode) {
 	case NL80211_IFTYPE_ADHOC:
-	case NL80211_IFTYPE_MESH_POINT:
 		set |= AR_STA_ID1_ADHOC;
 		REG_SET_BIT(ah, AR_CFG, AR_CFG_AP_ADHOC_INDICATION);
 		break;
+	case NL80211_IFTYPE_MESH_POINT:
 	case NL80211_IFTYPE_AP:
 		set |= AR_STA_ID1_STA_AP;
 		/* fall through */
@@ -1283,6 +1228,42 @@ void ath9k_hw_get_delta_slope_vals(struct ath_hw *ah, u32 coef_scaled,
 
 	*coef_mantissa = coef_man >> (COEF_SCALE_S - coef_exp);
 	*coef_exponent = coef_exp - 16;
+}
+
+/* AR9330 WAR:
+ * call external reset function to reset WMAC if:
+ * - doing a cold reset
+ * - we have pending frames in the TX queues.
+ */
+static bool ath9k_hw_ar9330_reset_war(struct ath_hw *ah, int type)
+{
+	int i, npend = 0;
+
+	for (i = 0; i < AR_NUM_QCU; i++) {
+		npend = ath9k_hw_numtxpending(ah, i);
+		if (npend)
+			break;
+	}
+
+	if (ah->external_reset &&
+	    (npend || type == ATH9K_RESET_COLD)) {
+		int reset_err = 0;
+
+		ath_dbg(ath9k_hw_common(ah), RESET,
+			"reset MAC via external reset\n");
+
+		reset_err = ah->external_reset();
+		if (reset_err) {
+			ath_err(ath9k_hw_common(ah),
+				"External reset failed, err=%d\n",
+				reset_err);
+			return false;
+		}
+
+		REG_WRITE(ah, AR_RTC_RESET, 1);
+	}
+
+	return true;
 }
 
 static bool ath9k_hw_set_reset(struct ath_hw *ah, int type)
@@ -1335,38 +1316,8 @@ static bool ath9k_hw_set_reset(struct ath_hw *ah, int type)
 	}
 
 	if (AR_SREV_9330(ah)) {
-		int npend = 0;
-		int i;
-
-		/* AR9330 WAR:
-		 * call external reset function to reset WMAC if:
-		 * - doing a cold reset
-		 * - we have pending frames in the TX queues
-		 */
-
-		for (i = 0; i < AR_NUM_QCU; i++) {
-			npend = ath9k_hw_numtxpending(ah, i);
-			if (npend)
-				break;
-		}
-
-		if (ah->external_reset &&
-		    (npend || type == ATH9K_RESET_COLD)) {
-			int reset_err = 0;
-
-			ath_dbg(ath9k_hw_common(ah), RESET,
-				"reset MAC via external reset\n");
-
-			reset_err = ah->external_reset();
-			if (reset_err) {
-				ath_err(ath9k_hw_common(ah),
-					"External reset failed, err=%d\n",
-					reset_err);
-				return false;
-			}
-
-			REG_WRITE(ah, AR_RTC_RESET, 1);
-		}
+		if (!ath9k_hw_ar9330_reset_war(ah, type))
+			return false;
 	}
 
 	if (ath9k_hw_mci_is_enabled(ah))
@@ -1376,7 +1327,12 @@ static bool ath9k_hw_set_reset(struct ath_hw *ah, int type)
 
 	REGWRITE_BUFFER_FLUSH(ah);
 
-	udelay(50);
+	if (AR_SREV_9300_20_OR_LATER(ah))
+		udelay(50);
+	else if (AR_SREV_9100(ah))
+		udelay(10000);
+	else
+		udelay(100);
 
 	REG_WRITE(ah, AR_RTC_RC, 0);
 	if (!ath9k_hw_wait(ah, AR_RTC_RC, AR_RTC_RC_M, 0, AH_WAIT_TIMEOUT)) {
@@ -1412,8 +1368,7 @@ static bool ath9k_hw_set_reset_power_on(struct ath_hw *ah)
 
 	REGWRITE_BUFFER_FLUSH(ah);
 
-	if (!AR_SREV_9300_20_OR_LATER(ah))
-		udelay(2);
+	udelay(2);
 
 	if (!AR_SREV_9100(ah) && !AR_SREV_9300_20_OR_LATER(ah))
 		REG_WRITE(ah, AR_RC, 0);
@@ -1489,7 +1444,6 @@ static bool ath9k_hw_chip_reset(struct ath_hw *ah,
 	if (AR_SREV_9330(ah))
 		ar9003_hw_internal_regulator_apply(ah);
 	ath9k_hw_init_pll(ah, chan);
-	ath9k_hw_set_rfmode(ah, chan);
 
 	return true;
 }
@@ -1498,16 +1452,17 @@ static bool ath9k_hw_channel_change(struct ath_hw *ah,
 				    struct ath9k_channel *chan)
 {
 	struct ath_common *common = ath9k_hw_common(ah);
+	struct ath9k_hw_capabilities *pCap = &ah->caps;
+	bool band_switch = false, mode_diff = false;
+	u8 ini_reloaded = 0;
 	u32 qnum;
 	int r;
-	bool edma = !!(ah->caps.hw_caps & ATH9K_HW_CAP_EDMA);
-	bool band_switch, mode_diff;
-	u8 ini_reloaded;
 
-	band_switch = (chan->channelFlags & (CHANNEL_2GHZ | CHANNEL_5GHZ)) !=
-		      (ah->curchan->channelFlags & (CHANNEL_2GHZ |
-						    CHANNEL_5GHZ));
-	mode_diff = (chan->chanmode != ah->curchan->chanmode);
+	if (pCap->hw_caps & ATH9K_HW_CAP_FCC_BAND_SWITCH) {
+		u32 flags_diff = chan->channelFlags ^ ah->curchan->channelFlags;
+		band_switch = !!(flags_diff & CHANNEL_5GHZ);
+		mode_diff = !!(flags_diff & ~CHANNEL_HT);
+	}
 
 	for (qnum = 0; qnum < AR_NUM_QCU; qnum++) {
 		if (ath9k_hw_numtxpending(ah, qnum)) {
@@ -1522,11 +1477,12 @@ static bool ath9k_hw_channel_change(struct ath_hw *ah,
 		return false;
 	}
 
-	if (edma && (band_switch || mode_diff)) {
+	if (band_switch || mode_diff) {
 		ath9k_hw_mark_phy_inactive(ah);
 		udelay(5);
 
-		ath9k_hw_init_pll(ah, NULL);
+		if (band_switch)
+			ath9k_hw_init_pll(ah, chan);
 
 		if (ath9k_hw_fast_chan_change(ah, chan, &ini_reloaded)) {
 			ath_err(common, "Failed to do fast channel change\n");
@@ -1543,22 +1499,19 @@ static bool ath9k_hw_channel_change(struct ath_hw *ah,
 	}
 	ath9k_hw_set_clockrate(ah);
 	ath9k_hw_apply_txpower(ah, chan, false);
-	ath9k_hw_rfbus_done(ah);
 
-	if (IS_CHAN_OFDM(chan) || IS_CHAN_HT(chan))
-		ath9k_hw_set_delta_slope(ah, chan);
-
+	ath9k_hw_set_delta_slope(ah, chan);
 	ath9k_hw_spur_mitigate_freq(ah, chan);
 
-	if (edma && (band_switch || mode_diff)) {
+	if (band_switch || ini_reloaded)
+		ah->eep_ops->set_board_values(ah, chan);
+
+	ath9k_hw_init_bb(ah, chan);
+	ath9k_hw_rfbus_done(ah);
+
+	if (band_switch || ini_reloaded) {
 		ah->ah_flags |= AH_FASTCC;
-		if (band_switch || ini_reloaded)
-			ah->eep_ops->set_board_values(ah, chan);
-
-		ath9k_hw_init_bb(ah, chan);
-
-		if (band_switch || ini_reloaded)
-			ath9k_hw_init_cal(ah, chan);
+		ath9k_hw_init_cal(ah, chan);
 		ah->ah_flags &= ~AH_FASTCC;
 	}
 
@@ -1648,6 +1601,19 @@ hang_check_iter:
 
 	return true;
 }
+
+void ath9k_hw_check_nav(struct ath_hw *ah)
+{
+	struct ath_common *common = ath9k_hw_common(ah);
+	u32 val;
+
+	val = REG_READ(ah, AR_NAV);
+	if (val != 0xdeadbeef && val > 0x7fff) {
+		ath_dbg(common, BSTUCK, "Abnormal NAV: 0x%x\n", val);
+		REG_WRITE(ah, AR_NAV, 0);
+	}
+}
+EXPORT_SYMBOL(ath9k_hw_check_nav);
 
 bool ath9k_hw_check_alive(struct ath_hw *ah)
 {
@@ -1780,16 +1746,11 @@ static void ath9k_hw_init_desc(struct ath_hw *ah)
 /*
  * Fast channel change:
  * (Change synthesizer based on channel freq without resetting chip)
- *
- * Don't do FCC when
- *   - Flag is not set
- *   - Chip is just coming out of full sleep
- *   - Channel to be set is same as current channel
- *   - Channel flags are different, (eg.,moving from 2GHz to 5GHz channel)
  */
 static int ath9k_hw_do_fastcc(struct ath_hw *ah, struct ath9k_channel *chan)
 {
 	struct ath_common *common = ath9k_hw_common(ah);
+	struct ath9k_hw_capabilities *pCap = &ah->caps;
 	int ret;
 
 	if (AR_SREV_9280(ah) && common->bus_ops->ath_bus_type == ATH_PCI)
@@ -1808,8 +1769,11 @@ static int ath9k_hw_do_fastcc(struct ath_hw *ah, struct ath9k_channel *chan)
 	    (CHANNEL_HALF | CHANNEL_QUARTER))
 		goto fail;
 
-	if ((chan->channelFlags & CHANNEL_ALL) !=
-	    (ah->curchan->channelFlags & CHANNEL_ALL))
+	/*
+	 * If cross-band fcc is not supoprted, bail out if channelFlags differ.
+	 */
+	if (!(pCap->hw_caps & ATH9K_HW_CAP_FCC_BAND_SWITCH) &&
+	    ((chan->channelFlags ^ ah->curchan->channelFlags) & ~CHANNEL_HT))
 		goto fail;
 
 	if (!ath9k_hw_check_alive(ah))
@@ -1820,9 +1784,9 @@ static int ath9k_hw_do_fastcc(struct ath_hw *ah, struct ath9k_channel *chan)
 	 * re-using are present.
 	 */
 	if (AR_SREV_9462(ah) && (ah->caldata &&
-				 (!ah->caldata->done_txiqcal_once ||
-				  !ah->caldata->done_txclcal_once ||
-				  !ah->caldata->rtt_done)))
+				 (!test_bit(TXIQCAL_DONE, &ah->caldata->cal_flags) ||
+				  !test_bit(TXCLCAL_DONE, &ah->caldata->cal_flags) ||
+				  !test_bit(RTT_DONE, &ah->caldata->cal_flags))))
 		goto fail;
 
 	ath_dbg(common, RESET, "FastChannelChange for %d -> %d\n",
@@ -1850,10 +1814,12 @@ int ath9k_hw_reset(struct ath_hw *ah, struct ath9k_channel *chan,
 		   struct ath9k_hw_cal_data *caldata, bool fastcc)
 {
 	struct ath_common *common = ath9k_hw_common(ah);
+	struct timespec ts;
 	u32 saveLedState;
 	u32 saveDefAntenna;
 	u32 macStaId1;
 	u64 tsf = 0;
+	s64 usec = 0;
 	int r;
 	bool start_mci_reset = false;
 	bool save_fullsleep = ah->chip_fullsleep;
@@ -1877,9 +1843,9 @@ int ath9k_hw_reset(struct ath_hw *ah, struct ath9k_channel *chan,
 		memset(caldata, 0, sizeof(*caldata));
 		ath9k_init_nfcal_hist_buffer(ah, chan);
 	} else if (caldata) {
-		caldata->paprd_packet_sent = false;
+		clear_bit(PAPRD_PACKET_SENT, &caldata->cal_flags);
 	}
-	ah->noise = ath9k_hw_getchan_noise(ah, chan);
+	ah->noise = ath9k_hw_getchan_noise(ah, chan, chan->noisefloor);
 
 	if (fastcc) {
 		r = ath9k_hw_do_fastcc(ah, chan);
@@ -1896,10 +1862,10 @@ int ath9k_hw_reset(struct ath_hw *ah, struct ath9k_channel *chan,
 
 	macStaId1 = REG_READ(ah, AR_STA_ID1) & AR_STA_ID1_BASE_RATE_11B;
 
-	/* For chips on which RTC reset is done, save TSF before it gets cleared */
-	if (AR_SREV_9100(ah) ||
-	    (AR_SREV_9280(ah) && ah->eep_ops->get_eeprom(ah, EEP_OL_PWRCTRL)))
-		tsf = ath9k_hw_gettsf64(ah);
+	/* Save TSF before chip reset, a cold reset clears it */
+	tsf = ath9k_hw_gettsf64(ah);
+	getrawmonotonic(&ts);
+	usec = ts.tv_sec * 1000 + ts.tv_nsec / 1000;
 
 	saveLedState = REG_READ(ah, AR_CFG_LED) &
 		(AR_CFG_LED_ASSOC_CTL | AR_CFG_LED_MODE_SEL |
@@ -1932,8 +1898,9 @@ int ath9k_hw_reset(struct ath_hw *ah, struct ath9k_channel *chan,
 	}
 
 	/* Restore TSF */
-	if (tsf)
-		ath9k_hw_settsf64(ah, tsf);
+	getrawmonotonic(&ts);
+	usec = ts.tv_sec * 1000 + ts.tv_nsec / 1000 - usec;
+	ath9k_hw_settsf64(ah, tsf + usec);
 
 	if (AR_SREV_9280_20_OR_LATER(ah))
 		REG_SET_BIT(ah, AR_GPIO_INPUT_EN_VAL, AR_GPIO_JTAG_DISABLE);
@@ -1944,6 +1911,8 @@ int ath9k_hw_reset(struct ath_hw *ah, struct ath9k_channel *chan,
 	r = ath9k_hw_process_ini(ah, chan);
 	if (r)
 		return r;
+
+	ath9k_hw_set_rfmode(ah, chan);
 
 	if (ath9k_hw_mci_is_enabled(ah))
 		ar9003_mci_reset(ah, false, IS_CHAN_2GHZ(chan), save_fullsleep);
@@ -1961,9 +1930,7 @@ int ath9k_hw_reset(struct ath_hw *ah, struct ath9k_channel *chan,
 
 	ath9k_hw_init_mfp(ah);
 
-	if (IS_CHAN_OFDM(chan) || IS_CHAN_HT(chan))
-		ath9k_hw_set_delta_slope(ah, chan);
-
+	ath9k_hw_set_delta_slope(ah, chan);
 	ath9k_hw_spur_mitigate_freq(ah, chan);
 	ah->eep_ops->set_board_values(ah, chan);
 
@@ -2014,8 +1981,8 @@ int ath9k_hw_reset(struct ath_hw *ah, struct ath9k_channel *chan,
 	ath9k_hw_init_bb(ah, chan);
 
 	if (caldata) {
-		caldata->done_txiqcal_once = false;
-		caldata->done_txclcal_once = false;
+		clear_bit(TXIQCAL_DONE, &caldata->cal_flags);
+		clear_bit(TXCLCAL_DONE, &caldata->cal_flags);
 	}
 	if (!ath9k_hw_init_cal(ah, chan))
 		return -EIO;
@@ -2048,7 +2015,7 @@ int ath9k_hw_reset(struct ath_hw *ah, struct ath9k_channel *chan,
 
 	ath9k_hw_apply_gpio_override(ah);
 
-	if (AR_SREV_9565(ah) && ah->shared_chain_lnadiv)
+	if (AR_SREV_9565(ah) && common->bt_ant_diversity)
 		REG_SET_BIT(ah, AR_BTCOEX_WL_LNADIV, AR_BTCOEX_WL_LNADIV_FORCE_ON);
 
 	return 0;
@@ -2255,12 +2222,9 @@ void ath9k_hw_beaconinit(struct ath_hw *ah, u32 next_beacon, u32 beacon_period)
 
 	switch (ah->opmode) {
 	case NL80211_IFTYPE_ADHOC:
-	case NL80211_IFTYPE_MESH_POINT:
 		REG_SET_BIT(ah, AR_TXCFG,
 			    AR_TXCFG_ADHOC_BEACON_ATIM_TX_POLICY);
-		REG_WRITE(ah, AR_NEXT_NDP_TIMER, next_beacon +
-			  TU_TO_USEC(ah->atim_window ? ah->atim_window : 1));
-		flags |= AR_NDP_TIMER_EN;
+	case NL80211_IFTYPE_MESH_POINT:
 	case NL80211_IFTYPE_AP:
 		REG_WRITE(ah, AR_NEXT_TBTT_TIMER, next_beacon);
 		REG_WRITE(ah, AR_NEXT_DMA_BEACON_ALERT, next_beacon -
@@ -2280,7 +2244,6 @@ void ath9k_hw_beaconinit(struct ath_hw *ah, u32 next_beacon, u32 beacon_period)
 	REG_WRITE(ah, AR_BEACON_PERIOD, beacon_period);
 	REG_WRITE(ah, AR_DMA_BEACON_PERIOD, beacon_period);
 	REG_WRITE(ah, AR_SWBA_PERIOD, beacon_period);
-	REG_WRITE(ah, AR_NDP_PERIOD, beacon_period);
 
 	REGWRITE_BUFFER_FLUSH(ah);
 
@@ -2297,12 +2260,9 @@ void ath9k_hw_set_sta_beacon_timers(struct ath_hw *ah,
 
 	ENABLE_REGWRITE_BUFFER(ah);
 
-	REG_WRITE(ah, AR_NEXT_TBTT_TIMER, TU_TO_USEC(bs->bs_nexttbtt));
-
-	REG_WRITE(ah, AR_BEACON_PERIOD,
-		  TU_TO_USEC(bs->bs_intval));
-	REG_WRITE(ah, AR_DMA_BEACON_PERIOD,
-		  TU_TO_USEC(bs->bs_intval));
+	REG_WRITE(ah, AR_NEXT_TBTT_TIMER, bs->bs_nexttbtt);
+	REG_WRITE(ah, AR_BEACON_PERIOD, bs->bs_intval);
+	REG_WRITE(ah, AR_DMA_BEACON_PERIOD, bs->bs_intval);
 
 	REGWRITE_BUFFER_FLUSH(ah);
 
@@ -2330,9 +2290,8 @@ void ath9k_hw_set_sta_beacon_timers(struct ath_hw *ah,
 
 	ENABLE_REGWRITE_BUFFER(ah);
 
-	REG_WRITE(ah, AR_NEXT_DTIM,
-		  TU_TO_USEC(bs->bs_nextdtim - SLEEP_SLOP));
-	REG_WRITE(ah, AR_NEXT_TIM, TU_TO_USEC(nextTbtt - SLEEP_SLOP));
+	REG_WRITE(ah, AR_NEXT_DTIM, bs->bs_nextdtim - SLEEP_SLOP);
+	REG_WRITE(ah, AR_NEXT_TIM, nextTbtt - SLEEP_SLOP);
 
 	REG_WRITE(ah, AR_SLEEP1,
 		  SM((CAB_TIMEOUT_VAL << 3), AR_SLEEP1_CAB_TIMEOUT)
@@ -2346,8 +2305,8 @@ void ath9k_hw_set_sta_beacon_timers(struct ath_hw *ah,
 	REG_WRITE(ah, AR_SLEEP2,
 		  SM(beacontimeout, AR_SLEEP2_BEACON_TIMEOUT));
 
-	REG_WRITE(ah, AR_TIM_PERIOD, TU_TO_USEC(beaconintval));
-	REG_WRITE(ah, AR_DTIM_PERIOD, TU_TO_USEC(dtimperiod));
+	REG_WRITE(ah, AR_TIM_PERIOD, beaconintval);
+	REG_WRITE(ah, AR_DTIM_PERIOD, dtimperiod);
 
 	REGWRITE_BUFFER_FLUSH(ah);
 
@@ -2505,7 +2464,7 @@ int ath9k_hw_fill_cap_info(struct ath_hw *ah)
 	else
 		pCap->rts_aggr_limit = (8 * 1024);
 
-#if defined(CONFIG_RFKILL) || defined(CONFIG_RFKILL_MODULE)
+#ifdef CPTCFG_ATH9K_RFKILL
 	ah->rfsilent = ah->eep_ops->get_eeprom(ah, EEP_RF_SILENT);
 	if (ah->rfsilent & EEP_RFSILENT_ENABLED) {
 		ah->rfkill_gpio =
@@ -2551,34 +2510,28 @@ int ath9k_hw_fill_cap_info(struct ath_hw *ah)
 	if (AR_SREV_9287_11_OR_LATER(ah) || AR_SREV_9271(ah))
 		pCap->hw_caps |= ATH9K_HW_CAP_SGI_20;
 
-	if (AR_SREV_9285(ah))
+	if (AR_SREV_9285(ah)) {
 		if (ah->eep_ops->get_eeprom(ah, EEP_MODAL_VER) >= 3) {
 			ant_div_ctl1 =
 				ah->eep_ops->get_eeprom(ah, EEP_ANT_DIV_CTL1);
-			if ((ant_div_ctl1 & 0x1) && ((ant_div_ctl1 >> 3) & 0x1))
+			if ((ant_div_ctl1 & 0x1) && ((ant_div_ctl1 >> 3) & 0x1)) {
 				pCap->hw_caps |= ATH9K_HW_CAP_ANT_DIV_COMB;
+				ath_info(common, "Enable LNA combining\n");
+			}
 		}
+	}
+
 	if (AR_SREV_9300_20_OR_LATER(ah)) {
 		if (ah->eep_ops->get_eeprom(ah, EEP_CHAIN_MASK_REDUCE))
 			pCap->hw_caps |= ATH9K_HW_CAP_APM;
 	}
 
-
 	if (AR_SREV_9330(ah) || AR_SREV_9485(ah) || AR_SREV_9565(ah)) {
 		ant_div_ctl1 = ah->eep_ops->get_eeprom(ah, EEP_ANT_DIV_CTL1);
-		/*
-		 * enable the diversity-combining algorithm only when
-		 * both enable_lna_div and enable_fast_div are set
-		 *		Table for Diversity
-		 * ant_div_alt_lnaconf		bit 0-1
-		 * ant_div_main_lnaconf		bit 2-3
-		 * ant_div_alt_gaintb		bit 4
-		 * ant_div_main_gaintb		bit 5
-		 * enable_ant_div_lnadiv	bit 6
-		 * enable_ant_fast_div		bit 7
-		 */
-		if ((ant_div_ctl1 >> 0x6) == 0x3)
+		if ((ant_div_ctl1 >> 0x6) == 0x3) {
 			pCap->hw_caps |= ATH9K_HW_CAP_ANT_DIV_COMB;
+			ath_info(common, "Enable LNA combining\n");
+		}
 	}
 
 	if (ath9k_hw_dfs_tested(ah))
@@ -2600,21 +2553,23 @@ int ath9k_hw_fill_cap_info(struct ath_hw *ah)
 		if (!(ah->ent_mode & AR_ENT_OTP_49GHZ_DISABLE))
 			pCap->hw_caps |= ATH9K_HW_CAP_MCI;
 
-		if (AR_SREV_9462_20(ah))
+		if (AR_SREV_9462_20_OR_LATER(ah))
 			pCap->hw_caps |= ATH9K_HW_CAP_RTT;
 	}
 
-	if (AR_SREV_9280_20_OR_LATER(ah)) {
-		pCap->hw_caps |= ATH9K_HW_WOW_DEVICE_CAPABLE |
-				 ATH9K_HW_WOW_PATTERN_MATCH_EXACT;
-
-		if (AR_SREV_9280(ah))
-			pCap->hw_caps |= ATH9K_HW_WOW_PATTERN_MATCH_DWORD;
-	}
+	if (AR_SREV_9462(ah))
+		pCap->hw_caps |= ATH9K_HW_WOW_DEVICE_CAPABLE;
 
 	if (AR_SREV_9300_20_OR_LATER(ah) &&
 	    ah->eep_ops->get_eeprom(ah, EEP_PAPRD))
 			pCap->hw_caps |= ATH9K_HW_CAP_PAPRD;
+
+	/*
+	 * Fast channel change across bands is available
+	 * only for AR9462 and AR9565.
+	 */
+	if (AR_SREV_9462(ah) || AR_SREV_9565(ah))
+		pCap->hw_caps |= ATH9K_HW_CAP_FCC_BAND_SWITCH;
 
 	return 0;
 }
@@ -2944,12 +2899,11 @@ void ath9k_hw_set_tsfadjust(struct ath_hw *ah, bool set)
 }
 EXPORT_SYMBOL(ath9k_hw_set_tsfadjust);
 
-void ath9k_hw_set11nmac2040(struct ath_hw *ah)
+void ath9k_hw_set11nmac2040(struct ath_hw *ah, struct ath9k_channel *chan)
 {
-	struct ieee80211_conf *conf = &ath9k_hw_common(ah)->hw->conf;
 	u32 macmode;
 
-	if (conf_is_ht40(conf) && !ah->config.cwm_ignore_extcca)
+	if (IS_CHAN_HT40(chan) && !ah->config.cwm_ignore_extcca)
 		macmode = AR_2040_JOINED_RX_CLEAR;
 	else
 		macmode = 0;
@@ -2988,20 +2942,6 @@ static const struct ath_gen_timer_configuration gen_tmr_configuration[] =
 
 /* HW generic timer primitives */
 
-/* compute and clear index of rightmost 1 */
-static u32 rightmost_index(struct ath_gen_timer_table *timer_table, u32 *mask)
-{
-	u32 b;
-
-	b = *mask;
-	b &= (0-b);
-	*mask &= ~b;
-	b *= debruijn32;
-	b >>= 27;
-
-	return timer_table->gen_timer_index[b];
-}
-
 u32 ath9k_hw_gettsf32(struct ath_hw *ah)
 {
 	return REG_READ(ah, AR_TSF_L32);
@@ -3016,6 +2956,10 @@ struct ath_gen_timer *ath_gen_timer_alloc(struct ath_hw *ah,
 {
 	struct ath_gen_timer_table *timer_table = &ah->hw_gen_timers;
 	struct ath_gen_timer *timer;
+
+	if ((timer_index < AR_FIRST_NDP_TIMER) ||
+		(timer_index >= ATH_MAX_GEN_TIMER))
+		return NULL;
 
 	timer = kzalloc(sizeof(struct ath_gen_timer), GFP_KERNEL);
 	if (timer == NULL)
@@ -3034,23 +2978,13 @@ EXPORT_SYMBOL(ath_gen_timer_alloc);
 
 void ath9k_hw_gen_timer_start(struct ath_hw *ah,
 			      struct ath_gen_timer *timer,
-			      u32 trig_timeout,
+			      u32 timer_next,
 			      u32 timer_period)
 {
 	struct ath_gen_timer_table *timer_table = &ah->hw_gen_timers;
-	u32 tsf, timer_next;
+	u32 mask = 0;
 
-	BUG_ON(!timer_period);
-
-	set_bit(timer->index, &timer_table->timer_mask.timer_bits);
-
-	tsf = ath9k_hw_gettsf32(ah);
-
-	timer_next = tsf + trig_timeout;
-
-	ath_dbg(ath9k_hw_common(ah), HWTIMER,
-		"current tsf %x period %x timer_next %x\n",
-		tsf, timer_period, timer_next);
+	timer_table->timer_mask |= BIT(timer->index);
 
 	/*
 	 * Program generic timer registers
@@ -3076,21 +3010,25 @@ void ath9k_hw_gen_timer_start(struct ath_hw *ah,
 				       (1 << timer->index));
 	}
 
-	/* Enable both trigger and thresh interrupt masks */
-	REG_SET_BIT(ah, AR_IMR_S5,
-		(SM(AR_GENTMR_BIT(timer->index), AR_IMR_S5_GENTIMER_THRESH) |
-		SM(AR_GENTMR_BIT(timer->index), AR_IMR_S5_GENTIMER_TRIG)));
+	if (timer->trigger)
+		mask |= SM(AR_GENTMR_BIT(timer->index),
+			   AR_IMR_S5_GENTIMER_TRIG);
+	if (timer->overflow)
+		mask |= SM(AR_GENTMR_BIT(timer->index),
+			   AR_IMR_S5_GENTIMER_THRESH);
+
+	REG_SET_BIT(ah, AR_IMR_S5, mask);
+
+	if ((ah->imask & ATH9K_INT_GENTIMER) == 0) {
+		ah->imask |= ATH9K_INT_GENTIMER;
+		ath9k_hw_set_interrupts(ah);
+	}
 }
 EXPORT_SYMBOL(ath9k_hw_gen_timer_start);
 
 void ath9k_hw_gen_timer_stop(struct ath_hw *ah, struct ath_gen_timer *timer)
 {
 	struct ath_gen_timer_table *timer_table = &ah->hw_gen_timers;
-
-	if ((timer->index < AR_FIRST_NDP_TIMER) ||
-		(timer->index >= ATH_MAX_GEN_TIMER)) {
-		return;
-	}
 
 	/* Clear generic timer enable bits. */
 	REG_CLR_BIT(ah, gen_tmr_configuration[timer->index].mode_addr,
@@ -3111,7 +3049,12 @@ void ath9k_hw_gen_timer_stop(struct ath_hw *ah, struct ath_gen_timer *timer)
 		(SM(AR_GENTMR_BIT(timer->index), AR_IMR_S5_GENTIMER_THRESH) |
 		SM(AR_GENTMR_BIT(timer->index), AR_IMR_S5_GENTIMER_TRIG)));
 
-	clear_bit(timer->index, &timer_table->timer_mask.timer_bits);
+	timer_table->timer_mask &= ~BIT(timer->index);
+
+	if (timer_table->timer_mask == 0) {
+		ah->imask &= ~ATH9K_INT_GENTIMER;
+		ath9k_hw_set_interrupts(ah);
+	}
 }
 EXPORT_SYMBOL(ath9k_hw_gen_timer_stop);
 
@@ -3132,32 +3075,32 @@ void ath_gen_timer_isr(struct ath_hw *ah)
 {
 	struct ath_gen_timer_table *timer_table = &ah->hw_gen_timers;
 	struct ath_gen_timer *timer;
-	struct ath_common *common = ath9k_hw_common(ah);
-	u32 trigger_mask, thresh_mask, index;
+	unsigned long trigger_mask, thresh_mask;
+	unsigned int index;
 
 	/* get hardware generic timer interrupt status */
 	trigger_mask = ah->intr_gen_timer_trigger;
 	thresh_mask = ah->intr_gen_timer_thresh;
-	trigger_mask &= timer_table->timer_mask.val;
-	thresh_mask &= timer_table->timer_mask.val;
+	trigger_mask &= timer_table->timer_mask;
+	thresh_mask &= timer_table->timer_mask;
 
 	trigger_mask &= ~thresh_mask;
 
-	while (thresh_mask) {
-		index = rightmost_index(timer_table, &thresh_mask);
+	for_each_set_bit(index, &thresh_mask, ARRAY_SIZE(timer_table->timers)) {
 		timer = timer_table->timers[index];
-		BUG_ON(!timer);
-		ath_dbg(common, HWTIMER, "TSF overflow for Gen timer %d\n",
-			index);
+		if (!timer)
+		    continue;
+		if (!timer->overflow)
+		    continue;
 		timer->overflow(timer->arg);
 	}
 
-	while (trigger_mask) {
-		index = rightmost_index(timer_table, &trigger_mask);
+	for_each_set_bit(index, &trigger_mask, ARRAY_SIZE(timer_table->timers)) {
 		timer = timer_table->timers[index];
-		BUG_ON(!timer);
-		ath_dbg(common, HWTIMER,
-			"Gen timer[%d] trigger\n", index);
+		if (!timer)
+		    continue;
+		if (!timer->trigger)
+		    continue;
 		timer->trigger(timer->arg);
 	}
 }
@@ -3241,19 +3184,19 @@ void ath9k_hw_name(struct ath_hw *ah, char *hw_name, size_t len)
 
 	/* chipsets >= AR9280 are single-chip */
 	if (AR_SREV_9280_20_OR_LATER(ah)) {
-		used = snprintf(hw_name, len,
-			       "Atheros AR%s Rev:%x",
-			       ath9k_hw_mac_bb_name(ah->hw_version.macVersion),
-			       ah->hw_version.macRev);
+		used = scnprintf(hw_name, len,
+				 "Atheros AR%s Rev:%x",
+				 ath9k_hw_mac_bb_name(ah->hw_version.macVersion),
+				 ah->hw_version.macRev);
 	}
 	else {
-		used = snprintf(hw_name, len,
-			       "Atheros AR%s MAC/BB Rev:%x AR%s RF Rev:%x",
-			       ath9k_hw_mac_bb_name(ah->hw_version.macVersion),
-			       ah->hw_version.macRev,
-			       ath9k_hw_rf_name((ah->hw_version.analog5GhzRev &
-						AR_RADIO_SREV_MAJOR)),
-			       ah->hw_version.phyRev);
+		used = scnprintf(hw_name, len,
+				 "Atheros AR%s MAC/BB Rev:%x AR%s RF Rev:%x",
+				 ath9k_hw_mac_bb_name(ah->hw_version.macVersion),
+				 ah->hw_version.macRev,
+				 ath9k_hw_rf_name((ah->hw_version.analog5GhzRev
+						  & AR_RADIO_SREV_MAJOR)),
+				 ah->hw_version.phyRev);
 	}
 
 	hw_name[used] = '\0';

@@ -10,7 +10,9 @@ extern void v2_6_28_skb_add_rx_frag(struct sk_buff *skb, int i,
 
 #define skb_add_rx_frag(skb, i, page, off, size, truesize) \
 	v2_6_28_skb_add_rx_frag(skb, i, page, off, size)
-#elif (LINUX_VERSION_CODE < KERNEL_VERSION(3,4,0))
+#elif (LINUX_VERSION_CODE < KERNEL_VERSION(3,4,0)) && \
+      (RHEL_RELEASE_CODE < RHEL_RELEASE_VERSION(6,4)) && \
+      !(defined(CONFIG_SUSE_KERNEL) && (LINUX_VERSION_CODE >= KERNEL_VERSION(3,0,0)))
 #define skb_add_rx_frag(skb, i, page, off, size, truesize) \
 	skb_add_rx_frag(skb, i, page, off, size)
 #endif
@@ -20,6 +22,7 @@ extern void v2_6_28_skb_add_rx_frag(struct sk_buff *skb, int i,
 extern struct sk_buff *__pskb_copy(struct sk_buff *skb,
 				   int headroom, gfp_t gfp_mask);
 
+#define skb_complete_wifi_ack LINUX_BACKPORT(skb_complete_wifi_ack)
 static inline void skb_complete_wifi_ack(struct sk_buff *skb, bool acked)
 {
 	WARN_ON(1);
@@ -69,6 +72,7 @@ static inline struct sk_buff *__netdev_alloc_skb_ip_align(struct net_device *dev
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,38)
+#define skb_checksum_start_offset LINUX_BACKPORT(skb_checksum_start_offset)
 static inline int skb_checksum_start_offset(const struct sk_buff *skb)
 {
 	return skb->csum_start - skb_headroom(skb);
@@ -76,6 +80,7 @@ static inline int skb_checksum_start_offset(const struct sk_buff *skb)
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,37)
+#define skb_has_frag_list LINUX_BACKPORT(skb_has_frag_list)
 static inline bool skb_has_frag_list(const struct sk_buff *skb)
 {
 	return skb_shinfo(skb)->frag_list != NULL;
@@ -97,9 +102,11 @@ static inline bool skb_defer_rx_timestamp(struct sk_buff *skb)
 	return false;
 }
 
+#if (RHEL_RELEASE_CODE < RHEL_RELEASE_VERSION(6,4))
 static inline void skb_tx_timestamp(struct sk_buff *skb)
 {
 }
+#endif
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,33)

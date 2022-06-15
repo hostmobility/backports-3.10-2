@@ -326,9 +326,8 @@ static int ath5k_pci_resume(struct device *dev)
 	return 0;
 }
 
-compat_pci_suspend(ath5k_pci_suspend)
-compat_pci_resume(ath5k_pci_resume)
-
+compat_pci_suspend(ath5k_pci_suspend);
+compat_pci_resume(ath5k_pci_resume);
 static SIMPLE_DEV_PM_OPS(ath5k_pm_ops, ath5k_pci_suspend, ath5k_pci_resume);
 #define ATH5K_PM_OPS	(&ath5k_pm_ops)
 #else
@@ -343,8 +342,8 @@ static struct pci_driver ath5k_pci_driver = {
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,29))
 	.driver.pm	= ATH5K_PM_OPS,
 #elif defined(CONFIG_PM_SLEEP)
-	.suspend        = ath5k_pci_suspend_compat,
-	.resume         = ath5k_pci_resume_compat,
+	.suspend = ath5k_pci_suspend_compat,
+	.resume = ath5k_pci_resume_compat,
 #endif
 };
 

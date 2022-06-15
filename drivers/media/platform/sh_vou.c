@@ -286,7 +286,7 @@ static int sh_vou_buf_prepare(struct videobuf_queue *vq,
 	vb->size = vb->height * bytes_per_line;
 	if (vb->baddr && vb->bsize < vb->size) {
 		/* User buffer too small */
-		dev_warn(vq->dev, "User buffer too small: [%u] @ %lx\n",
+		dev_warn(vq->dev, "User buffer too small: [%zu] @ %lx\n",
 			 vb->bsize, vb->baddr);
 		return -EINVAL;
 	}
@@ -302,9 +302,10 @@ static int sh_vou_buf_prepare(struct videobuf_queue *vq,
 	}
 
 	dev_dbg(vou_dev->v4l2_dev.dev,
-		"%s(): fmt #%d, %u bytes per line, phys 0x%x, type %d, state %d\n",
+		"%s(): fmt #%d, %u bytes per line, phys %pad, type %d, state %d\n",
 		__func__, vou_dev->pix_idx, bytes_per_line,
-		videobuf_to_dma_contig(vb), vb->memory, vb->state);
+		({ dma_addr_t addr = videobuf_to_dma_contig(vb); &addr; }),
+		vb->memory, vb->state);
 
 	return 0;
 }
@@ -776,7 +777,7 @@ static int sh_vou_try_fmt_vid_out(struct file *file, void *priv,
 	v4l_bound_align_image(&pix->width, 0, VOU_MAX_IMAGE_WIDTH, 1,
 			      &pix->height, 0, VOU_MAX_IMAGE_HEIGHT, 1, 0);
 
-	for (i = 0; ARRAY_SIZE(vou_fmt); i++)
+	for (i = 0; i < ARRAY_SIZE(vou_fmt); i++)
 		if (vou_fmt[i].pfmt == pix->pixelformat)
 			return 0;
 
@@ -1248,32 +1249,6 @@ static unsigned int sh_vou_poll(struct file *file, poll_table *wait)
 	return res;
 }
 
-static int sh_vou_g_chip_ident(struct file *file, void *fh,
-				   struct v4l2_dbg_chip_ident *id)
-{
-	struct sh_vou_device *vou_dev = video_drvdata(file);
-
-	return v4l2_device_call_until_err(&vou_dev->v4l2_dev, 0, core, g_chip_ident, id);
-}
-
-#ifdef CPTCFG_VIDEO_ADV_DEBUG
-static int sh_vou_g_register(struct file *file, void *fh,
-				 struct v4l2_dbg_register *reg)
-{
-	struct sh_vou_device *vou_dev = video_drvdata(file);
-
-	return v4l2_device_call_until_err(&vou_dev->v4l2_dev, 0, core, g_register, reg);
-}
-
-static int sh_vou_s_register(struct file *file, void *fh,
-				 const struct v4l2_dbg_register *reg)
-{
-	struct sh_vou_device *vou_dev = video_drvdata(file);
-
-	return v4l2_device_call_until_err(&vou_dev->v4l2_dev, 0, core, s_register, reg);
-}
-#endif
-
 /* sh_vou display ioctl operations */
 static const struct v4l2_ioctl_ops sh_vou_ioctl_ops = {
 	.vidioc_querycap        	= sh_vou_querycap,
@@ -1292,11 +1267,6 @@ static const struct v4l2_ioctl_ops sh_vou_ioctl_ops = {
 	.vidioc_cropcap			= sh_vou_cropcap,
 	.vidioc_g_crop			= sh_vou_g_crop,
 	.vidioc_s_crop			= sh_vou_s_crop,
-	.vidioc_g_chip_ident		= sh_vou_g_chip_ident,
-#ifdef CPTCFG_VIDEO_ADV_DEBUG
-	.vidioc_g_register		= sh_vou_g_register,
-	.vidioc_s_register		= sh_vou_s_register,
-#endif
 };
 
 static const struct v4l2_file_operations sh_vou_fops = {
@@ -1313,7 +1283,6 @@ static const struct video_device sh_vou_video_template = {
 	.fops		= &sh_vou_fops,
 	.ioctl_ops	= &sh_vou_ioctl_ops,
 	.tvnorms	= V4L2_STD_525_60, /* PAL only supported in 8-bit non-bt656 mode */
-	.current_norm	= V4L2_STD_NTSC_M,
 	.vfl_dir	= VFL_DIR_TX,
 };
 
@@ -1352,7 +1321,7 @@ static int sh_vou_probe(struct platform_device *pdev)
 	pix = &vou_dev->pix;
 
 	/* Fill in defaults */
-	vou_dev->std		= sh_vou_video_template.current_norm;
+	vou_dev->std		= V4L2_STD_NTSC_M;
 	rect->left		= 0;
 	rect->top		= 0;
 	rect->width		= VOU_MAX_IMAGE_WIDTH;

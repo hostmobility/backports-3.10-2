@@ -2,7 +2,7 @@ config WLCORE
 	depends on !BACKPORT_KERNEL_2_6_30
 	tristate "TI wlcore support"
 	depends on m
-	depends on WL_TI && GENERIC_HARDIRQS && MAC80211
+	depends on WL_TI && MAC80211
 	select BACKPORT_FW_LOADER
 	---help---
 	  This module contains the main code for TI WLAN chips.  It abstracts
@@ -14,7 +14,6 @@ config WLCORE
 	  unsure.
 
 config WLCORE_SPI
-	depends on !BACKPORT_KERNEL_2_6_25
 	tristate "TI wlcore SPI support"
 	depends on m
 	depends on WLCORE && SPI_MASTER

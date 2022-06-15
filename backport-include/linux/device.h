@@ -15,20 +15,21 @@
  */
 typedef int (backport_device_find_function_t)(struct device *, void *);
 #define class_find_device(cls, start, idx, fun) \
-	class_find_device((cls), (start), (idx),\
+	class_find_device((cls), (start), (void *)(idx),\
 			  (backport_device_find_function_t *)(fun))
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25)
-#define dev_emerg(dev, format, arg...)          \
-	dev_printk(KERN_EMERG , dev , format , ## arg)
-#define dev_alert(dev, format, arg...)          \
-	dev_printk(KERN_ALERT , dev , format , ## arg)
-#define dev_crit(dev, format, arg...)           \
-	dev_printk(KERN_CRIT , dev , format , ## arg)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)
+static inline int
+backport_device_move(struct device *dev, struct device *new_parent,
+		     enum dpm_order dpm_order)
+{
+	return device_move(dev, new_parent);
+}
+#define device_move LINUX_BACKPORT(device_move)
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,3,0)
+#ifndef module_driver
 /**
  * module_driver() - Helper macro for drivers that don't do anything
  * special in module init/exit. This eliminates a lot of boilerplate.
@@ -115,6 +116,7 @@ static inline void pm_wakeup_event(struct device *dev, unsigned int msec) {}
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,34)
+#define device_lock LINUX_BACKPORT(device_lock)
 static inline void device_lock(struct device *dev)
 {
 #if defined(CONFIG_PREEMPT_RT) || defined(CONFIG_PREEMPT_DESKTOP)
@@ -124,6 +126,7 @@ static inline void device_lock(struct device *dev)
 #endif
 }
 
+#define device_trylock LINUX_BACKPORT(device_trylock)
 static inline int device_trylock(struct device *dev)
 {
 #if defined(CONFIG_PREEMPT_RT) || defined(CONFIG_PREEMPT_DESKTOP)
@@ -133,6 +136,7 @@ static inline int device_trylock(struct device *dev)
 #endif
 }
 
+#define device_unlock LINUX_BACKPORT(device_unlock)
 static inline void device_unlock(struct device *dev)
 {
 #if defined(CONFIG_PREEMPT_RT) || defined(CONFIG_PREEMPT_DESKTOP)
@@ -174,6 +178,59 @@ static inline void dev_set_uevent_suppress(struct device *dev, int val)
 #define dev_set_name LINUX_BACKPORT(dev_set_name)
 extern int dev_set_name(struct device *dev, const char *name, ...)
 			__attribute__((format(printf, 2, 3)));
+#endif
+
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(3,6,0)
+static inline void
+backport_device_release_driver(struct device *dev)
+{
+	device_release_driver(dev);
+	device_lock(dev);
+	dev_set_drvdata(dev, NULL);
+	device_unlock(dev);
+}
+#define device_release_driver LINUX_BACKPORT(device_release_driver)
+#endif /* LINUX_VERSION_CODE <= KERNEL_VERSION(3,6,0) */
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,11,0)
+#define DEVICE_ATTR_RO(_name) \
+struct device_attribute dev_attr_ ## _name = __ATTR_RO(_name);
+#define DEVICE_ATTR_RW(_name) \
+struct device_attribute dev_attr_ ## _name = __ATTR_RW(_name)
+#endif
+
+#define ATTRIBUTE_GROUPS_BACKPORT(_name) \
+static struct BP_ATTR_GRP_STRUCT _name##_dev_attrs[ARRAY_SIZE(_name##_attrs)];\
+static void init_##_name##_attrs(void)				\
+{									\
+	int i;								\
+	for (i = 0; _name##_attrs[i]; i++)				\
+		_name##_dev_attrs[i] =				\
+			*container_of(_name##_attrs[i],		\
+				      struct BP_ATTR_GRP_STRUCT,	\
+				      attr);				\
+}
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,11,0)
+#undef ATTRIBUTE_GROUPS
+#define ATTRIBUTE_GROUPS(_name)					\
+static const struct attribute_group _name##_group = {		\
+	.attrs = _name##_attrs,					\
+};								\
+static inline void init_##_name##_attrs(void) {}		\
+__ATTRIBUTE_GROUPS(_name)
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,32)
+#define dev_get_platdata LINUX_BACKPORT(dev_get_platdata)
+static inline void *dev_get_platdata(const struct device *dev)
+{
+	return dev->platform_data;
+}
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,13,0)
+#define devm_kmalloc(dev, size, flags) devm_kzalloc(dev, size, flags) 
 #endif
 
 #endif /* __BACKPORT_DEVICE_H */

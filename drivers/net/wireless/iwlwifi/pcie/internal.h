@@ -217,6 +217,7 @@ struct iwl_pcie_txq_scratch_buf {
  * @trans_pcie: pointer back to transport (for timer)
  * @need_update: indicates need to update read/write index
  * @active: stores if queue is active
+ * @ampdu: true if this queue is an ampdu queue for an specific RA/TID
  *
  * A Tx queue consists of circular buffer of BDs (a.k.a. TFDs, transmit frame
  * descriptors) and required locking structures.
@@ -232,6 +233,7 @@ struct iwl_txq {
 	struct iwl_trans_pcie *trans_pcie;
 	u8 need_update;
 	u8 active;
+	bool ampdu;
 };
 
 static inline dma_addr_t
@@ -254,7 +256,6 @@ iwl_pcie_get_scratchbuf_dma(struct iwl_txq *txq, int idx)
  * @hw_base: pci hardware address support
  * @ucode_write_complete: indicates that the ucode has been copied.
  * @ucode_write_waitq: wait queue for uCode load
- * @status - transport specific status flags
  * @cmd_queue - command queue number
  * @rx_buf_size_8k: 8 kB RX buffer size
  * @bc_table_dword: true if the BC table expects DWORD (as opposed to bytes)
@@ -294,7 +295,6 @@ struct iwl_trans_pcie {
 	wait_queue_head_t ucode_write_waitq;
 	wait_queue_head_t wait_command_queue;
 
-	unsigned long status;
 	u8 cmd_queue;
 	u8 cmd_fifo;
 	u8 n_no_reclaim_cmds;
@@ -314,24 +314,6 @@ struct iwl_trans_pcie {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,31)
 	struct compat_threaded_irq irq_compat;
 #endif
-};
-
-/**
- * enum iwl_pcie_status: status of the PCIe transport
- * @STATUS_HCMD_ACTIVE: a SYNC command is being processed
- * @STATUS_DEVICE_ENABLED: APM is enabled
- * @STATUS_TPOWER_PMI: the device might be asleep (need to wake it up)
- * @STATUS_INT_ENABLED: interrupts are enabled
- * @STATUS_RFKILL: the HW RFkill switch is in KILL position
- * @STATUS_FW_ERROR: the fw is in error state
- */
-enum iwl_pcie_status {
-	STATUS_HCMD_ACTIVE,
-	STATUS_DEVICE_ENABLED,
-	STATUS_TPOWER_PMI,
-	STATUS_INT_ENABLED,
-	STATUS_RFKILL,
-	STATUS_FW_ERROR,
 };
 
 #define IWL_TRANS_GET_PCIE_TRANS(_iwl_trans) \
@@ -393,7 +375,6 @@ void iwl_trans_pcie_tx_reset(struct iwl_trans *trans);
 /*****************************************************
 * Error handling
 ******************************************************/
-int iwl_pcie_dump_fh(struct iwl_trans *trans, char **buf);
 void iwl_pcie_dump_csr(struct iwl_trans *trans);
 
 /*****************************************************
@@ -401,8 +382,7 @@ void iwl_pcie_dump_csr(struct iwl_trans *trans);
 ******************************************************/
 static inline void iwl_disable_interrupts(struct iwl_trans *trans)
 {
-	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
-	clear_bit(STATUS_INT_ENABLED, &trans_pcie->status);
+	clear_bit(STATUS_INT_ENABLED, &trans->status);
 
 	/* disable interrupts from uCode/NIC to host */
 	iwl_write32(trans, CSR_INT_MASK, 0x00000000);
@@ -419,7 +399,7 @@ static inline void iwl_enable_interrupts(struct iwl_trans *trans)
 	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
 
 	IWL_DEBUG_ISR(trans, "Enabling interrupts\n");
-	set_bit(STATUS_INT_ENABLED, &trans_pcie->status);
+	set_bit(STATUS_INT_ENABLED, &trans->status);
 	iwl_write32(trans, CSR_INT_MASK, trans_pcie->inta_mask);
 }
 
