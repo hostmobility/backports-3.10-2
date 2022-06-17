@@ -25,17 +25,11 @@ struct ath_txq;
 struct ath_buf;
 struct fft_sample_tlv;
 
-#ifdef CPTCFG_ATH9K_DEBUGFS
+
 #define TX_STAT_INC(q, c) sc->debug.stats.txstats[q].c++
 #define RESET_STAT_INC(sc, type) sc->debug.stats.reset[type]++
 #define ANT_STAT_INC(i, c) sc->debug.stats.ant_stats[i].c++
 #define ANT_LNA_INC(i, c) sc->debug.stats.ant_stats[i].lna_recv_cnt[c]++;
-#else
-#define TX_STAT_INC(q, c) do { } while (0)
-#define RESET_STAT_INC(sc, type) do { } while (0)
-#define ANT_STAT_INC(i, c) do { } while (0)
-#define ANT_LNA_INC(i, c) do { } while (0)
-#endif
 
 enum ath_reset_type {
 	RESET_TYPE_BB_HANG,

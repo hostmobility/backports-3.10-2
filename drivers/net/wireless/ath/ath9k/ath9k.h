@@ -755,9 +755,9 @@ struct ath_softc {
 	struct ath9k_hw_cal_data caldata;
 	int last_rssi;
 
-#ifdef CPTCFG_ATH9K_DEBUGFS
+
 	struct ath9k_debug debug;
-#endif
+
 	struct ath_beacon_config cur_beacon_conf;
 	struct delayed_work tx_complete_work;
 	struct delayed_work hw_pll_work;
