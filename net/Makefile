@@ -57,8 +57,8 @@ obj-$(CONFIG_CAIF)		+= caif/
 ifneq ($(CONFIG_DCB),)
 obj-y				+= dcb/
 endif
-obj-$(CPTCFG_IEEE802154)	+= ieee802154/
-obj-$(CPTCFG_MAC802154)		+= mac802154/
+obj-$(CONFIG_IEEE802154)	+= ieee802154/
+obj-$(CONFIG_MAC802154)		+= mac802154/
 
 ifeq ($(CONFIG_NET),y)
 obj-$(CONFIG_SYSCTL)		+= sysctl_net.o
