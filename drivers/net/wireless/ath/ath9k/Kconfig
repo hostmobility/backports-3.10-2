@@ -7,7 +7,7 @@ config ATH9K_COMMON
 	select ATH_COMMON
 config ATH9K_DFS_DEBUGFS
 	def_bool y
-	depends on ATH9K_DEBUGFS && ATH9K_DFS_CERTIFIED
+	depends on ATH9K_DEBUGFS
 
 config ATH9K_BTCOEX_SUPPORT
 	bool "Atheros bluetooth coexistence support"
@@ -20,7 +20,6 @@ config ATH9K_BTCOEX_SUPPORT
 config ATH9K
 	tristate "Atheros 802.11n wireless cards support"
 	depends on m
-	depends on MAC80211 && HAS_DMA
 	select ATH9K_HW
 	select MAC80211_LEDS
 	select BACKPORT_LEDS_CLASS
@@ -34,9 +33,6 @@ config ATH9K
 	  APs that come with these cards refer to ath9k wiki
 	  products page:
 
-	  http://wireless.kernel.org/en/users/Drivers/ath9k/products
-
-	  If you choose to build a module, it'll be called ath9k.
 
 config ATH9K_PCI
 	bool "Atheros ath9k PCI/PCIe bus support"
@@ -60,18 +56,15 @@ config ATH9K_AHB
 
 config ATH9K_DEBUGFS
 	bool "Atheros ath9k debugging"
-	depends on ATH9K && DEBUG_FS
+	select DEBUG_FS
 	select MAC80211_DEBUGFS
 	depends on RELAY
 	---help---
-	  Say Y, if you need access to ath9k's statistics for
-	  interrupts, rate control, etc.
-
-	  Also required for changing debug message flags at run time.
+	  Say Y, if you need access to ath9k
 
 config ATH9K_DFS_CERTIFIED
 	bool "Atheros DFS support for certified platforms"
-	depends on ATH9K && CFG80211_CERTIFICATION_ONUS
+	depends on ATH9K
 	default n
 	---help---
 	  This option enables DFS support for initiating radiation on
@@ -85,12 +78,10 @@ config ATH9K_DFS_CERTIFIED
 
 	  This is currently only a placeholder for future DFS support,
 	  as DFS support requires more components that still need to be
-	  developed. At this point enabling this option won't do anything
-	  except increase code size.
+	  developed. At this point enabling this option 
 
 config ATH9K_TX99
 	bool "Atheros ath9k TX99 testing support"
-	depends on ATH9K_DEBUGFS && CFG80211_CERTIFICATION_ONUS
 	default n
 	---help---
 	  Say N. This should only be enabled on systems undergoing
