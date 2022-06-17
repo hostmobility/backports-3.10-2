@@ -798,21 +798,11 @@ struct ath_softc {
 /* TX99 */
 /********/
 
-#ifdef CPTCFG_ATH9K_TX99
+
 void ath9k_tx99_init_debug(struct ath_softc *sc);
 int ath9k_tx99_send(struct ath_softc *sc, struct sk_buff *skb,
 		    struct ath_tx_control *txctl);
-#else
-static inline void ath9k_tx99_init_debug(struct ath_softc *sc)
-{
-}
-static inline int ath9k_tx99_send(struct ath_softc *sc,
-				  struct sk_buff *skb,
-				  struct ath_tx_control *txctl)
-{
-	return 0;
-}
-#endif /* CPTCFG_ATH9K_TX99 */
+
 
 static inline void ath_read_cachesize(struct ath_common *common, int *csz)
 {
