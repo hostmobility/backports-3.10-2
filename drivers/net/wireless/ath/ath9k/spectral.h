@@ -197,16 +197,7 @@ void ath9k_spectral_scan_trigger(struct ieee80211_hw *hw);
 int ath9k_spectral_scan_config(struct ieee80211_hw *hw,
 			       enum spectral_mode spectral_mode);
 
-#ifdef CPTCFG_ATH9K_DEBUGFS
 int ath_process_fft(struct ath_softc *sc, struct ieee80211_hdr *hdr,
 		    struct ath_rx_status *rs, u64 tsf);
-#else
-static inline int ath_process_fft(struct ath_softc *sc,
-				  struct ieee80211_hdr *hdr,
-				  struct ath_rx_status *rs, u64 tsf)
-{
-	return 0;
-}
-#endif /* CPTCFG_ATH9K_DEBUGFS */
 
 #endif /* SPECTRAL_H */
